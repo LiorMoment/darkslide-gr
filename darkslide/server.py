@@ -11,6 +11,7 @@ import os
 import re
 import struct
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -37,7 +38,9 @@ class App:
             self.store.ensure_film_icons_dir()
         except OSError:
             pass  # the film list falls back to its drawn name plates
-        self.iiix_generation_lock = threading.Lock()
+        # One generation at a time, whether it comes in as a plain request or as a job.
+        self.generation_lock = self.iiix_generation_lock = threading.Lock()
+        self.long_jobs, self.long_jobs_lock = {}, threading.Lock()
         self.template = tpl.load(template_name)
         self.detail = tpl.load_detail(self.template)
 
@@ -506,37 +509,47 @@ def api_generate(req, pid):
     return store.put_build(output, manifest)
 
 
-def api_iiix_candidate(req, pid):
-    """Explicit offline candidate; never changes the production output gate."""
-    from . import gr3x_generation
+def _iiix_candidate_body(req):
     body = req.read_json()
     if (type(body) is not dict or set(body) != {'expected_changes', 'recipe_extension'} or
             type(body['expected_changes']) is not dict or type(body['recipe_extension']) is not bool):
         raise ApiError(400, '候选请求格式不正确')
     if body['recipe_extension'] and not models.IIIX_RECIPE_MODULE:
         raise ApiError(422, '1.0 不提供照片配方模块（它会让固件变大）；只能原位替换胶片')
+    return body
+
+
+def api_iiix_candidate(req, pid):
+    """Explicit offline candidate; never changes the production output gate."""
+    body = _iiix_candidate_body(req)
     if not req.app.iiix_generation_lock.acquire(blocking=False):
         raise ApiError(409, '已有 IIIx 候选正在生成，请稍后再试')
     try:
-        project, model, template = project_context(req, pid)
-        project = copy.deepcopy(project)
-        if model != models.GR3X:
-            raise ApiError(422, '此入口仅用于 GR IIIx 1.60')
-        if template.get('reviewed') is not True:
-            raise ApiError(409, '模板不可用')
-        if project.get('unsaved') or project.get('changes', {}) != body['expected_changes']:
-            raise ApiError(409, '当前选择尚未保存或已改变')
-        source = req.store.input_path(model.input_sha)
-        if not source.exists():
-            raise ApiError(409, '找不到官方原件，请重新导入')
-        try:
-            output, manifest = gr3x_generation.run(req.store, project, template, source.read_bytes(),
-                recipe_extension=body['recipe_extension'])
-        except generate.GenerateError as exc:
-            return Reply({'error': str(exc), 'checks': exc.checks}, 422)
-        return req.store.put_build(output, manifest)
+        return _iiix_candidate(req, pid, body)
     finally:
         req.app.iiix_generation_lock.release()
+
+
+def _iiix_candidate(req, pid, body):
+    """The candidate itself; the caller holds the generation lock."""
+    from . import gr3x_generation
+    project, model, template = project_context(req, pid)
+    project = copy.deepcopy(project)
+    if model != models.GR3X:
+        raise ApiError(422, '此入口仅用于 GR IIIx 1.60')
+    if template.get('reviewed') is not True:
+        raise ApiError(409, '模板不可用')
+    if project.get('unsaved') or project.get('changes', {}) != body['expected_changes']:
+        raise ApiError(409, '当前选择尚未保存或已改变')
+    source = req.store.input_path(model.input_sha)
+    if not source.exists():
+        raise ApiError(409, '找不到官方原件，请重新导入')
+    try:
+        output, manifest = gr3x_generation.run(req.store, project, template, source.read_bytes(),
+            recipe_extension=body['recipe_extension'])
+    except generate.GenerateError as exc:
+        return Reply({'error': str(exc), 'checks': exc.checks}, 422)
+    return req.store.put_build(output, manifest)
 
 
 def api_film_catalog(req):
@@ -985,6 +998,151 @@ def api_bake_grade(req, pid):
         raise
 
 
+# --- long requests as jobs ----------------------------------------------------
+# 生成 and 拟合 can take longer than a browser is willing to wait for one reply (WebKit gives up
+# on a request that has had no answer for 60 seconds, and the page shows "Load failed"). So the page
+# hands them in as a job and asks how it is doing, the way 「收进相机范围」 does: POST .../jobs, then
+# GET .../jobs/<job> until it is done. A job runs the very route function the plain endpoint runs
+# (api_generate, api_fit_film_lut, ...) and keeps its status and JSON body, so the result, the
+# errors and the checks are exactly what the plain request would have answered. The plain
+# endpoints stay as they were.
+
+LONG_TASKS = ("generate", "iiix-candidate", "film-fit", "film-bake")
+GENERATING = ("generate", "iiix-candidate")
+LONG_KEEP = 600  # seconds a finished job can still be read
+
+
+class JobRequest:
+    """What a route function sees of the request when it runs as a job."""
+    query = ""
+    after_reply = None
+
+    def __init__(self, app, body):
+        self.app, self.headers, self._body = app, {}, body
+
+    @property
+    def store(self):
+        return self.app.store
+
+    def read_json(self):
+        return copy.deepcopy(self._body)
+
+    def read_body(self):
+        return json.dumps(self._body).encode("utf-8")
+
+
+def _long_key(job):
+    return ("long", job)
+
+
+def _long_sweep(app):
+    """Forget jobs that finished a while ago (the caller holds app.long_jobs_lock)."""
+    from . import lut_ranges
+    now = time.time()
+    for job in list(app.long_jobs):
+        state = lut_ranges.JOBS.status(_long_key(job))
+        if state is None or (state["state"] in ("done", "failed") and now - state.get("finished", now) > LONG_KEEP):
+            lut_ranges.JOBS.forget(_long_key(job))
+            del app.long_jobs[job]
+
+
+def _long_reply(app, pid, job):
+    """The job's state for the page: queued / running (done, total, ahead), done (result) or
+    failed (error, status and body, as the plain request would have answered)."""
+    from . import lut_ranges
+    row = app.long_jobs.get(job)
+    state = lut_ranges.JOBS.status(_long_key(job)) if row and row["pid"] == pid else None
+    if state is None:
+        return dict(state="none", job=job)
+    out = dict(_job_reply(state), job=job, task=row["task"])
+    out.pop("result", None)
+    if state["state"] == "done":
+        answer = state["result"]
+        if answer["status"] < 400:
+            out["result"] = answer["body"]
+        else:
+            out.update(state="failed", status=answer["status"], error=answer["body"].get("error", ""), body=answer["body"])
+    elif state["state"] == "failed":
+        out.update(status=500, body=dict(error=out.get("error", "")))
+    return out
+
+
+def _long_call(task, req, pid, lid):
+    if task == "generate":
+        return api_generate(req, pid)
+    if task == "iiix-candidate":
+        return _iiix_candidate(req, pid, _iiix_candidate_body(req))
+    if task == "film-fit":
+        return api_fit_film_lut(req, pid, lid)
+    return api_bake_grade(req, pid)
+
+
+def api_start_job(req, pid):
+    """Hand in a 生成 ("generate", "iiix-candidate") or a 拟合 ("film-fit" of "lut", "film-bake") as a
+    job. `body` is what the plain endpoint would have been sent. Only one 生成 job runs at a time
+    (the plain /generate, which the page no longer uses, stays as it was); the same 拟合 asked
+    for again joins the one that is already running."""
+    from . import lut_ranges
+    body = req.read_json()
+    task, inner, lid = body.get("task"), body.get("body", {}), body.get("lut")
+    if (set(body) - {"task", "body", "lut"} or task not in LONG_TASKS or type(inner) is not dict or
+            (task == "film-fit") != (lid is not None) or
+            (lid is not None and not (type(lid) is str and film_luts.USER_ID.match(lid)))):
+        raise ApiError(400, "请求格式不正确")
+    req.store.get_project(pid)  # an unknown project: the same error as the plain endpoint
+    app, generating = req.app, task in GENERATING
+    with app.long_jobs_lock:
+        _long_sweep(app)
+        if generating:
+            if not app.generation_lock.acquire(blocking=False):
+                raise ApiError(409, "已有 IIIx 候选正在生成，请稍后再试" if task == "iiix-candidate" else "已有生成正在进行，请稍后再试")
+            job = _lut_job_key("long", task, pid, time.time(), len(app.long_jobs))
+        else:
+            job = _lut_job_key("long", task, pid, lid, inner)
+            if (lut_ranges.JOBS.status(_long_key(job)) or {}).get("state") in ("queued", "running"):
+                return _long_reply(app, pid, job)
+
+        def run(api):
+            try:
+                try:
+                    answer = _long_call(task, JobRequest(app, inner), pid, lid)
+                except Exception as exc:  # noqa: BLE001 - mapped like a plain request; anything else is a 500
+                    answer = error_reply(exc)
+                    if answer is None:
+                        log.exception("job %s failed", task)
+                        answer = Reply({"error": str(exc) or exc.__class__.__name__}, 500)
+                status, _, data = render(answer, errors="backslashreplace")
+                return dict(status=status, body=json.loads(data))
+            finally:
+                if generating:
+                    app.generation_lock.release()
+        try:
+            app.long_jobs[job] = dict(pid=pid, task=task)
+            lut_ranges.JOBS.forget(_long_key(job))
+            lut_ranges.JOBS.submit(_long_key(job), run, 1, lane="generate" if generating else "fit")
+        except BaseException:
+            app.long_jobs.pop(job, None)
+            if generating:
+                app.generation_lock.release()
+            raise
+    return _long_reply(app, pid, job)
+
+
+def api_job_status(req, pid, job):
+    app = req.app
+    with app.long_jobs_lock:
+        return _long_reply(app, pid, job)
+
+
+def api_list_jobs(req, pid):
+    """This project's jobs that are still queued or running (a reloaded page picks them up again)."""
+    app = req.app
+    with app.long_jobs_lock:
+        _long_sweep(app)
+        replies = [_long_reply(app, pid, job) for job, row in app.long_jobs.items() if row["pid"] == pid]
+    return dict(jobs=[r for r in replies if r["state"] in ("queued", "running")])
+
+
 def api_film_lut_camera(req, pid, lid):
     if project_context(req, pid)[1] == models.GR3X:
         from .gr3x_camera_preview import preview
@@ -1132,6 +1290,9 @@ ROUTES = tuple((method, path_pattern(spec), func) for method, spec, func in (
     ("GET", "/api/projects/<pid>/assets/<digest>", api_get_asset),
     ("POST", "/api/projects/<pid>/generate", api_generate),
     ("POST", "/api/projects/<pid>/iiix-candidate", api_iiix_candidate),
+    ("POST", "/api/projects/<pid>/jobs", api_start_job),
+    ("GET", "/api/projects/<pid>/jobs", api_list_jobs),
+    ("GET", "/api/projects/<pid>/jobs/<job>", api_job_status),
     ("GET", "/api/film-catalog", api_film_catalog),
     ("GET", "/api/film-preview/<fid>.cube", api_film_preview),
     ("GET", "/api/film-icons/<fid>", api_film_icon),

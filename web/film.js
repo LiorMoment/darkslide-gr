@@ -815,7 +815,7 @@
     film.checked[id] = true; film.checking = id;
     setTimeout(async () => {
       let ok = false;
-      try { await api("POST", "/api/projects/" + pid + "/film-luts/" + id + "/fit"); ok = true; }
+      try { await api.job(pid, "film-fit", { lut: id }); ok = true; }
       catch (e) { if (!/写不进相机|超出了理光/.test(e.message)) toast(e.message, true); }
       if (film.pid !== pid || loadEpoch !== epoch) return;
       try { const r = await api("GET", "/api/projects/" + pid + "/film-luts"); if (film.pid === pid && loadEpoch === epoch) { film.luts = r.luts; film.capabilities = r.capabilities; } } catch (e) {}
@@ -854,12 +854,12 @@
         if (film.pid !== pid || loadEpoch !== epoch) return;
         const lut = window.DarkslideAdjust.combine(base, edit.grade, true, 33);
         const name = slot.name + " 调色" + (id ? "（" + nameOf(id) + "）" : "");
-        await api("POST", "/api/projects/" + pid + "/film-bakes",
-                  { cube: cubeText(lut, name, id && !isUser(id) && !isRecipe(id)), name, film: id, grade: edit.grade });
+        await api.job(pid, "film-bake",
+                      { body: { cube: cubeText(lut, name, id && !isUser(id) && !isRecipe(id)), name, film: id, grade: edit.grade } });
       } else if (isRecipe(id)) {
         await cubeOf(id); await cubeAt(recipeUrl(id) + "/install.cube");
       } else if (isUser(id)) {
-        await api("POST", "/api/projects/" + pid + "/film-luts/" + id + "/fit");
+        await api.job(pid, "film-fit", { lut: id });
       } else if (cameraUrl(slot.no, edit)) {
         await cubeAt(cameraUrl(slot.no, edit));
       }
@@ -906,9 +906,9 @@
             const base = id ? await cubeOf(id) : null;
             const lut = window.DarkslideAdjust.combine(base, edit.grade, true, 33);
             const name = slot.name + " 调色" + (id ? "（" + nameOf(id) + "）" : "");
-            await api("POST", "/api/projects/" + pid + "/film-bakes", { cube: cubeText(lut, name, id && !isUser(id) && !isRecipe(id)), name, film: id, grade: edit.grade });
+            await api.job(pid, "film-bake", { body: { cube: cubeText(lut, name, id && !isUser(id) && !isRecipe(id)), name, film: id, grade: edit.grade } });
           } else {
-            await api("POST", "/api/projects/" + pid + "/film-luts/" + id + "/fit");
+            await api.job(pid, "film-fit", { lut: id });
           }
         } catch (e) { throw new Error("「" + slot.name + "」" + e.message); }
       }

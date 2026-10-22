@@ -19,6 +19,7 @@ const state = {
   revealAsset: null,
   enterSlots: false,
   draftState: "",
+  generating: null,  // the id of the project whose 生成 this page is waiting for
   feature: "ic",
   view: "split",   // 左右对比 / 只看调后 / 相机近似
 };
@@ -41,6 +42,38 @@ async function api(method, path, body, headers) {
   }
   return data;
 }
+
+// 生成 and 拟合 can take longer than a browser waits for one reply (WebKit, the engine of Safari, gives up
+// after 60 seconds without an answer and the page shows "Load failed"). They are handed in as a job and
+// asked about every JOB_POLL_MS: api.job(pid, task, {body, lut, live}) resolves with what the plain endpoint
+// would have answered, or throws the same Error (message, and .data with the checks). `live()` false
+// stops waiting (the job itself keeps going on the computer) and resolves with undefined.
+const JOB_POLL_MS = 700;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function apiJob(pid, task, opts = {}) {
+  const request = { task };
+  if (opts.lut) request.lut = opts.lut;
+  if (opts.body !== undefined) request.body = opts.body;
+  return pollJob(pid, await api("POST", "/api/projects/" + pid + "/jobs", request), opts);
+}
+async function pollJob(pid, job, opts = {}) {
+  let slips = 0;
+  while (job.state === "queued" || job.state === "running") {
+    await sleep(JOB_POLL_MS);
+    if (opts.live && !opts.live()) return undefined;
+    try {
+      job = await api("GET", "/api/projects/" + pid + "/jobs/" + job.job);
+      slips = 0;
+    } catch (e) {
+      if (e.data || ++slips > 5) throw e;  // the computer answered with an error, or kept not answering
+    }
+  }
+  if (job.state === "done") return job.result;
+  const err = new Error(job.state === "failed" ? (job.error || "请求失败") : "任务已丢失，可能是程序重启过，请再试一次");
+  err.data = job.body || {};
+  throw err;
+}
+api.job = apiJob;
 
 function toast(msg, bad) {
   const el = $("toast");
@@ -351,6 +384,7 @@ async function loadProject(p) {
   renderAll();
   window.DarkslideFilm.load(p.id);
   maybeGuide("work");
+  resumeGeneration(p.id);
 }
 
 function renderProjectBody() {
@@ -1121,14 +1155,45 @@ async function generate() {
     if (!state.project || state.project.id !== projectId) return;
     $("doneTitle").textContent = "正在生成并核对…";
     $("doneText").textContent = "从官方原件重新生成，然后用另一套代码拆开读回、逐项核对。根据组合可能需要几十秒到几分钟。";
-    const manifest = await api("POST", "/api/projects/" + projectId + (candidate ? "/iiix-candidate" : "/generate"),
-      candidate ? {expected_changes: expected, recipe_extension: recipeExtension} : undefined);
-    if (!state.project || state.project.id !== projectId) return;
-    state.status.builds = (state.status.builds || []).concat([{ build_id: manifest.build_id, project_id: manifest.project_id,
-      output_sha256: manifest.output_sha256, created_at: manifest.created_at }]);
-    showResult(true, manifest);
+    state.generating = projectId;
+    const manifest = await apiJob(projectId, candidate ? "iiix-candidate" : "generate", {
+      body: candidate ? {expected_changes: expected, recipe_extension: recipeExtension} : undefined,
+      live: () => !!state.project && state.project.id === projectId });
+    finishGeneration(projectId, manifest);
   } catch (e) {
-    if (state.project && state.project.id === projectId) showResult(false, { error: e.message, checks: (e.data && e.data.checks) || [] });
+    failGeneration(projectId, e);
+  } finally {
+    if (state.generating === projectId) state.generating = null;
+  }
+}
+
+function finishGeneration(projectId, manifest) {
+  if (!manifest || !state.project || state.project.id !== projectId) return;
+  state.status.builds = (state.status.builds || []).filter((b) => b.build_id !== manifest.build_id).concat([{
+    build_id: manifest.build_id, project_id: manifest.project_id, output_sha256: manifest.output_sha256, created_at: manifest.created_at }]);
+  showResult(true, manifest);
+}
+
+function failGeneration(projectId, e) {
+  if (state.project && state.project.id === projectId) showResult(false, { error: e.message, checks: (e.data && e.data.checks) || [] });
+}
+
+// A page that was reloaded (or a project opened again) while its 生成 is still running picks the job up
+// again, instead of leaving it running unseen.
+async function resumeGeneration(projectId) {
+  if (state.generating === projectId) return;
+  let jobs;
+  try { jobs = (await api("GET", "/api/projects/" + projectId + "/jobs")).jobs; } catch (e) { return; }
+  const job = jobs.find((j) => j.task === "generate" || j.task === "iiix-candidate");
+  if (!job || state.generating === projectId || !state.project || state.project.id !== projectId) return;
+  state.generating = projectId;
+  showPending();
+  try {
+    finishGeneration(projectId, await pollJob(projectId, job, { live: () => !!state.project && state.project.id === projectId }));
+  } catch (e) {
+    failGeneration(projectId, e);
+  } finally {
+    if (state.generating === projectId) state.generating = null;
   }
 }
 
