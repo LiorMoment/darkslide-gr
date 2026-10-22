@@ -1,0 +1,108 @@
+# The desktop app (desktop/) on each platform it ships for. No firmware is ever used
+# here, as in the offline tests: a selftest build is driven through its window (the page
+# loads, imports reach the server, server and blob downloads land, localStorage, links
+# leave for the browser, 退出 ends the app and its server), the app is packaged, its
+# bundled files and licences are checked, and the packaged app is installed, started,
+# quit and killed. The installers are kept as run artifacts; nothing is published.
+name: desktop
+
+on:
+  pull_request:
+    paths: ["desktop/**", "web/**", "darkslide/**", "launcher.py", ".github/workflows/desktop.yml"]
+  push:
+    branches: [main]
+    paths: ["desktop/**", "web/**", "darkslide/**", "launcher.py", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows/amd64
+            dir: windows-amd64
+            exe: Darkslide GR.exe
+          - os: macos-latest
+            platform: darwin/arm64
+            dir: darwin-arm64
+            exe: Darkslide GR.app/Contents/MacOS/Darkslide GR
+          - os: macos-15-intel
+            platform: darwin/amd64
+            dir: darwin-amd64
+            exe: Darkslide GR.app/Contents/MacOS/Darkslide GR
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    env:
+      PYTHONUTF8: "1"
+      LC_ALL: en_US.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4  # the CLI evaluates mygo.config.ts with Node 22.6+
+        with:
+          node-version: "22"
+      - name: Licences match what is built in
+        run: python scripts/licenses.py --check
+      - name: Bundled Python
+        run: python scripts/fetch_python.py --platform ${{ matrix.dir }}
+      - name: Selftest build
+        env:
+          GOFLAGS: -tags=selftest
+        run: go tool mygo build -platform ${{ matrix.platform }} -skip-dmg -o build-selftest
+      - name: Drive the window
+        run: python scripts/selftest.py "build-selftest/${{ matrix.dir }}/${{ matrix.exe }}"
+      - name: Package
+        env:
+          DARKSLIDE_BUILD: ${{ github.run_number }}  # the build number; the version is darkslide's own
+        run: go tool mygo build -platform ${{ matrix.platform }}
+      - name: Everything the program reads is in the app
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then res="dist/${{ matrix.dir }}"; else res="dist/${{ matrix.dir }}/Darkslide GR.app/Contents/Resources"; fi
+          python scripts/check_resources.py "$res"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.dir }}
+          path: |
+            desktop/dist/*/*.dmg
+            desktop/dist/*/*Setup*.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Install and start the installer's app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "dist/windows-amd64/*Setup*.exe" | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\Darkslide GR\Darkslide GR.exe"
+          if (-not (Test-Path $exe)) { throw "not installed at $exe" }
+          python scripts/smoke.py "$exe"
+          python scripts/smoke.py "$exe" --kill
+      - name: Start the packaged app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python scripts/smoke.py "dist/${{ matrix.dir }}/${{ matrix.exe }}"
+          python scripts/smoke.py "dist/${{ matrix.dir }}/${{ matrix.exe }}" --kill
+      - name: Server log
+        if: always()
+        run: |
+          for f in "$APPDATA/Darkslide GR/logs/server.log" "$HOME/Library/Logs/Darkslide GR/server.log"; do
+            [ -f "$f" ] && { echo "== $f"; cat "$f"; }
+          done
+          true
