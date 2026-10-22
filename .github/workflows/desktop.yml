@@ -3,10 +3,14 @@
 # loads, imports reach the server, server and blob downloads land, localStorage, links
 # leave for the browser, 退出 ends the app and its server), the app is packaged, its
 # bundled files and licences are checked, and the packaged app is installed, started,
-# quit and killed. The installers are kept as run artifacts; nothing is published.
+# quit and killed. The installers are kept as run artifacts. Only when a release is
+# published do they go further: the attach job, the one job with write access, adds them
+# (and their SHA-256 sums) to that release.
 name: desktop
 
 on:
+  release:
+    types: [published]
   pull_request:
     paths: ["desktop/**", "web/**", "darkslide/**", "launcher.py", ".github/workflows/desktop.yml"]
   push:
@@ -26,15 +30,15 @@ jobs:
           - os: windows-latest
             platform: windows/amd64
             dir: windows-amd64
-            exe: Darkslide GR.exe
+            exe: DARKSLIDE GR.exe
           - os: macos-latest
             platform: darwin/arm64
             dir: darwin-arm64
-            exe: Darkslide GR.app/Contents/MacOS/Darkslide GR
+            exe: DARKSLIDE GR.app/Contents/MacOS/DARKSLIDE GR
           - os: macos-15-intel
             platform: darwin/amd64
             dir: darwin-amd64
-            exe: Darkslide GR.app/Contents/MacOS/Darkslide GR
+            exe: DARKSLIDE GR.app/Contents/MacOS/DARKSLIDE GR
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     defaults:
@@ -74,7 +78,7 @@ jobs:
         run: go tool mygo build -platform ${{ matrix.platform }}
       - name: Everything the program reads is in the app
         run: |
-          if [ "$RUNNER_OS" = Windows ]; then res="dist/${{ matrix.dir }}"; else res="dist/${{ matrix.dir }}/Darkslide GR.app/Contents/Resources"; fi
+          if [ "$RUNNER_OS" = Windows ]; then res="dist/${{ matrix.dir }}"; else res="dist/${{ matrix.dir }}/DARKSLIDE GR.app/Contents/Resources"; fi
           python scripts/check_resources.py "$res"
       - uses: actions/upload-artifact@v4
         with:
@@ -90,7 +94,7 @@ jobs:
         run: |
           $setup = Get-ChildItem "dist/windows-amd64/*Setup*.exe" | Select-Object -First 1
           Start-Process $setup.FullName -ArgumentList "/S" -Wait
-          $exe = Join-Path $env:LOCALAPPDATA "Programs\Darkslide GR\Darkslide GR.exe"
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\DARKSLIDE GR\DARKSLIDE GR.exe"
           if (-not (Test-Path $exe)) { throw "not installed at $exe" }
           python scripts/smoke.py "$exe"
           python scripts/smoke.py "$exe" --kill
@@ -102,7 +106,33 @@ jobs:
       - name: Server log
         if: always()
         run: |
-          for f in "$APPDATA/Darkslide GR/logs/server.log" "$HOME/Library/Logs/Darkslide GR/server.log"; do
+          for f in "$APPDATA/DARKSLIDE GR/logs/server.log" "$HOME/Library/Logs/DARKSLIDE GR/server.log"; do
             [ -f "$f" ] && { echo "== $f"; cat "$f"; }
           done
           true
+
+  attach:
+    if: github.event_name == 'release'
+    needs: app
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: installers
+          merge-multiple: true
+      - name: Name the installers and add them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          mkdir out
+          cp installers/darwin-arm64/*.dmg "out/DARKSLIDE-GR-$ver-mac-apple-silicon.dmg"
+          cp installers/darwin-amd64/*.dmg "out/DARKSLIDE-GR-$ver-mac-intel.dmg"
+          cp installers/windows-amd64/*Setup*.exe "out/DARKSLIDE-GR-$ver-windows-setup.exe"
+          (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          gh release upload "$TAG" out/* --clobber --repo "$GITHUB_REPOSITORY"

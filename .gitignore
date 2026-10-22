@@ -25,6 +25,10 @@
 *.gif
 *.GIF
 !docs/images/*.png
+# 产品图标（用户 2026-10-22 定稿，desktop/scripts/make_icons.py 生成）
+!desktop/icon.png
+!desktop/splash.png
+!web/favicon.png
 !tests/fixtures/*.jpg
 
 # 本机运行产生的文件

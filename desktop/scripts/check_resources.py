@@ -8,7 +8,7 @@ reading another top-level folder or file (as darkslide/ reads film_curves/ and
 templates/), the app would lack it and fail at run time. This finds every top-level
 name of the repository that darkslide/*.py or launcher.py spells as a string, and
 fails when one of them is not listed. Given built resources folders (an app's
-Contents/Resources, or the folder next to Darkslide GR.exe), it also checks each
+Contents/Resources, or the folder next to DARKSLIDE GR.exe), it also checks each
 listed entry is there. Exit code 0 when nothing is missing.
 """
 import ast

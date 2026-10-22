@@ -18,10 +18,11 @@ function buildNumber() {
 }
 
 export default {
-  name: "Darkslide GR",
+  name: "DARKSLIDE GR",
   identifier: "io.github.liormoment.darkslide-gr",
   version: match[1],
-  copyright: "Darkslide GR contributors",
+  icon: "icon.png", // the 23d design without the small line; scripts/make_icons.py draws it
+  copyright: "DARKSLIDE GR contributors",
   // Everything the server reads at run time: scripts/check_resources.py fails the build
   // when the program starts reading a folder of the repository not listed here.
   resources: [
@@ -35,6 +36,7 @@ export default {
     "../LICENSE",
     "../THIRD_PARTY_NOTICES.md",
     "DESKTOP_LICENSES.md", // the shell's MIT licence and those of what is built into it
+    "python_licenses", // the licences of the libraries built into the bundled Python
   ],
   macos: {
     infoPlist: { CFBundleVersion: buildNumber() },

@@ -14,11 +14,13 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// longRequests are the page's calls that can outlast a webview's patience: a fit,
-// 生成 and the read-back that follows. WebKit gives up on a request after 60 s of
-// silence ("Load failed"), which a slower Mac reaches. fetchBridge sends these
-// through Local.Request instead, which waits as long as the server works.
-var longRequests = regexp.MustCompile(`^/api/(projects/[^/]+/(generate|iiix-candidate|film-luts/[^/]+/fit|film-bakes|film-prepare)|fitting-setup)$`)
+// longRequests are the page's calls that can outlast a webview's patience and are still
+// one request: the read-back before 生成 and the fitting component's download. WebKit
+// gives up on a request after 60 s of silence ("Load failed"), which a slower Mac or a
+// slow network reaches. fetchBridge sends these through Local.Request instead, which
+// waits as long as the server works. 生成 and 拟合 themselves are jobs the page polls
+// (/api/projects/<pid>/jobs) since 1.3.3, so each of their requests is short.
+var longRequests = regexp.MustCompile(`^/api/(projects/[^/]+/film-prepare|fitting-setup)$`)
 
 // fetchBridge hands the page's long requests, those with a JSON or no body, to
 // Local.Request. Its pattern is longRequests' own.

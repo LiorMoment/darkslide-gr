@@ -27,6 +27,17 @@
 | Unicorn（「拟合」功能的可选组件） | 2.1.4 | https://github.com/unicorn-engine/unicorn/tree/2.1.4 | 原生引擎 GPL-2.0；Python wheel 元数据标记 BSD，不能将引擎视为 BSD |
 | opencc-js（仅开发时，用来生成 `tools/i18n/zh-Hant.json` 与 `web/i18n-data.js` 里的繁体对照表；不随程序运行） | 1.0.5 | https://github.com/nk2028/opencc-js | 代码 MIT；所含 OpenCC 词典 Apache-2.0（https://github.com/BYVoid/OpenCC） |
 
+### 桌面版（`desktop/`）
+
+桌面版安装包里另有两部分第三方内容，许可全文随安装包附上：
+
+| 组件 | 版本 | 来源 | 许可 |
+|---|---|---|---|
+| 桌面版外壳（`desktop/`，作者 [@Ady0402](https://github.com/Ady0402)） | 随本仓库 | 本仓库 [#6](https://github.com/LiorMoment/darkslide-gr/pull/6) | MIT；外壳编译进的 MyGo、purego、golang.org/x/…、Go 标准库许可全文见 `desktop/DESKTOP_LICENSES.md` |
+| 自带的 Python（python-build-standalone） | CPython 3.13.16（20261013） | https://github.com/astral-sh/python-build-standalone | Python 许可（PSF-2.0）；其中编译进的 OpenSSL、bzip2、xz、libffi、mpdecimal、SQLite、zlib 等许可全文见 `desktop/python_licenses/` |
+
+外壳和 DARKSLIDE GR 本体是两个独立的程序，只通过本机网络通信，各自适用自己的许可；本体仍是 GPL-2.0-only。
+
 ## 4. 胶片曲线数据（CC BY-SA 4.0）
 
 `film_curves/` 文件夹里的胶片曲线数据来自 **spektrafilm**（作者 Andrea Volpato，https://github.com/andreavolpato/spektrafilm ），按 CC BY-SA 4.0 使用并经 LiorMoment 修改（导出后设定白点，再拟合为相机设置）。这部分数据单独适用 CC BY-SA 4.0，不适用本项目的 GPL-2.0-only；署名、许可全文与改动记录见该文件夹。DARKSLIDE GR 没有使用 spektrafilm 的程序代码。

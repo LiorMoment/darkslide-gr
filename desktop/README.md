@@ -12,7 +12,7 @@
 
 页面代码不改；外壳用预加载脚本把下面几类请求交给 Go（只对本机服务的页面开放）：
 
-- **耗时请求**（拟合、生成并核对等）：WebKit 的请求 60 秒没有回应就会放弃（Intel Mac 会遇到），改由 Go 发送，等到服务回应为止。
+- **耗时请求**（生成前的核对准备、下载拟合组件）：WebKit 的请求 60 秒没有回应就会放弃（较慢的电脑或网络会遇到），改由 Go 发送，等到服务回应为止。生成和拟合本身从 1.3.3 起改为后台任务、页面轮询（[#5](https://github.com/LiorMoment/darkslide-gr/pull/5)），每个请求都很短，不再经过这里。
 - **Windows 的下载**：实测中 WebView2 不下载 `blob:` 链接（导出 .cube、配方卡）；同一页面已经下载过文件后，再点「下载固件」也不会开始下载。所以在 Windows 上，带 `download` 的链接改由 Go 写进「下载」文件夹。设置 `DARKSLIDE_DOWNLOAD_BRIDGE=1` 可以在其他系统上测试这一路径。
 
 ## 构建
@@ -27,20 +27,22 @@ python3 scripts/fetch_python.py          # 下载并核对 python-build-standalo
 LC_ALL=en_US.UTF-8 go tool mygo build -platform darwin/arm64,darwin/amd64,windows/amd64
 ```
 
-产物在 `dist/<平台>/`：macOS 是 `.app` 和 `.dmg`，Windows 是 `Darkslide GR Setup <版本> amd64.exe`（按用户安装，不需要管理员权限）。Homebrew 的 makensis 在没有 UTF-8 locale 时会崩溃（`std::bad_alloc`），所以要加 `LC_ALL`。
+发布 Release 时，`.github/workflows/desktop.yml` 的 attach 任务会在三个平台打包，把安装包和 `SHA256SUMS.txt` 附到这个 Release。
+
+产物在 `dist/<平台>/`：macOS 是 `.app` 和 `.dmg`，Windows 是 `DARKSLIDE GR Setup <版本> amd64.exe`（按用户安装，不需要管理员权限）。Homebrew 的 makensis 在没有 UTF-8 locale 时会崩溃（`std::bad_alloc`），所以要加 `LC_ALL`。
 
 开发时用 `go tool mygo dev`，程序文件直接取自仓库。用 `DARKSLIDE_PYTHON` 可以改用别的 Python。
 
 ## 授权
 
-外壳（`desktop/` 下的程序）采用 MIT 许可。它是一个独立的程序，只通过本机 HTTP 和 DARKSLIDE GR 通信；DARKSLIDE GR 本体原样打包，仍是 GPL-2.0-only。外壳编译进去的 Go 模块（MyGo、purego、golang.org/x/…、Go 标准库）的许可全文，在 `DESKTOP_LICENSES.md` 里，这个文件也会放进 App。依赖有变化时，运行 `python3 desktop/scripts/licenses.py` 重新生成，CI 会检查它是不是最新的。
+外壳（`desktop/` 下的程序）采用 MIT 许可。它是一个独立的程序，只通过本机 HTTP 和 DARKSLIDE GR 通信；DARKSLIDE GR 本体原样打包，仍是 GPL-2.0-only。外壳编译进去的 Go 模块（MyGo、purego、golang.org/x/…、Go 标准库）的许可全文，在 `DESKTOP_LICENSES.md` 里，这个文件也会放进 App。自带 Python 里编译进的第三方库（OpenSSL、bzip2、xz、libffi、mpdecimal、SQLite、zlib 等）的许可全文在 `python_licenses/`，同样放进 App；换 Python 版本时要一起更新（见该文件夹的 README）。依赖有变化时，运行 `python3 desktop/scripts/licenses.py` 重新生成，CI 会检查它是不是最新的。
 
 ## 程序改动时要注意
 
 外壳只依赖程序的三样东西：`launcher.py` 读 `PORT` 环境变量、接受 `--no-browser`，以及服务的 `POST /api/quit`。这三样不变，程序怎么改，重新打包就行，版本号也会自动跟上。另外两件事：
 
 - 程序开始读仓库里新的顶层文件夹时，要把它加进 `mygo.config.ts` 的 `resources`。`scripts/check_resources.py` 会找出漏掉的，CI 每次都会跑。
-- 新增耗时很长、以单个请求等待的接口时，要把它加进 `local.go` 的 `longRequests`，否则 Intel Mac 上可能碰到 WebKit 的 60 秒限制。
+- 新增耗时很长、以单个请求等待的接口时，最好像生成那样改成任务；做不到的，要把它加进 `local.go` 的 `longRequests`，否则 Intel Mac 上可能碰到 WebKit 的 60 秒限制。
 
 ## 平台
 
@@ -59,5 +61,5 @@ Windows 10 需要安装 WebView2 Runtime，Windows 11 已经自带。Unicorn 没
 ```sh
 GOFLAGS=-tags=selftest go tool mygo build -platform darwin/arm64 -skip-dmg -o build-selftest
 open -n --env DARKSLIDE_DATA=/tmp/ds --env DARKSLIDE_SELFTEST_PORT=9911 \
-  --env DARKSLIDE_SELFTEST_DOWNLOADS=/tmp/dl "build-selftest/darwin-arm64/Darkslide GR.app"
+  --env DARKSLIDE_SELFTEST_DOWNLOADS=/tmp/dl "build-selftest/darwin-arm64/DARKSLIDE GR.app"
 ```

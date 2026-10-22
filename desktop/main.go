@@ -1,4 +1,4 @@
-// Darkslide GR desktop: a MyGo window around the unchanged Python app.
+// DARKSLIDE GR desktop: a MyGo window around the unchanged Python app.
 //
 // The app ships a standalone Python and the program files (launcher.py,
 // darkslide/, web/, templates/, film_curves/) as resources. On launch it
@@ -11,6 +11,8 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
@@ -38,12 +40,17 @@ const (
 	portTries = 20
 )
 
-const loadingPage = `<!doctype html><meta charset="utf-8">
+// splashPNG is the icon with its small DARKSLIDE GR line, shown while the server starts.
+//
+//go:embed splash.png
+var splashPNG []byte
+
+var loadingPage = fmt.Sprintf(`<!doctype html><meta charset="utf-8">
 <style>
 :root{color-scheme:light dark;font:15px -apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif}
-body{margin:0;height:100vh;display:grid;place-items:center;background:light-dark(#f5f5f7,#1c1c1e);color:light-dark(#1d1d1f,#f5f5f7)}
-p{opacity:.7}
-</style><p>正在啟動 Darkslide GR…</p>`
+body{margin:0;height:100vh;display:grid;place-items:center;background:#262624}
+img{width:160px;height:160px}
+</style><img alt="DARKSLIDE GR" src="data:image/png;base64,%s">`, base64.StdEncoding.EncodeToString(splashPNG))
 
 // watchParent runs launcher.py (argv[1]) as python3 launcher.py would, and
 // ends the process once stdin reaches its end: the app has gone.
@@ -105,7 +112,7 @@ func main() {
 	})
 	mygo.App.WhenReady(func() {
 		win = mygo.NewWindow(mygo.WindowOptions{
-			Title:           "Darkslide GR",
+			Title:           "DARKSLIDE GR",
 			Width:           1280,
 			Height:          860,
 			MinWidth:        900,
@@ -172,7 +179,7 @@ func showError(page *mygo.Page, err error, logPath string) {
 	page.LoadHTML(fmt.Sprintf(`<!doctype html><meta charset="utf-8">
 <style>:root{color-scheme:light dark;font:14px -apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif}
 body{margin:32px;background:light-dark(#f5f5f7,#1c1c1e)}pre{white-space:pre-wrap;font-size:12px;opacity:.8}</style>
-<h2>Darkslide GR 無法啟動</h2><p>%s</p><p>記錄檔：%s</p><pre>%s</pre>`,
+<h2>DARKSLIDE GR 无法启动 / could not start</h2><p>%s</p><p>记录 / Log: %s</p><pre>%s</pre>`,
 		html.EscapeString(err.Error()), html.EscapeString(logPath), html.EscapeString(tail)), "")
 }
 
@@ -184,7 +191,7 @@ func appRoot(resources string) (string, error) {
 			return filepath.Abs(dir)
 		}
 	}
-	return "", errors.New("找不到 launcher.py，程式檔不完整，請重新安裝")
+	return "", errors.New("找不到 launcher.py，程序文件不完整，请重新安装 / launcher.py is missing, please reinstall")
 }
 
 // pythonPath is the bundled interpreter, or $DARKSLIDE_PYTHON for development.
@@ -197,7 +204,7 @@ func pythonPath(resources string) (string, error) {
 		p = filepath.Join(resources, "python", "python.exe")
 	}
 	if _, err := os.Stat(p); err != nil {
-		return "", fmt.Errorf("找不到內建的 Python（%s），請先執行 scripts/fetch_python.py 或重新安裝", p)
+		return "", fmt.Errorf("找不到自带的 Python（%s），请重新安装 / the bundled Python is missing, please reinstall", p)
 	}
 	return p, nil
 }
@@ -263,7 +270,7 @@ func (s *server) start() (string, error) {
 	hideConsole(cmd)
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
-		return "", fmt.Errorf("無法啟動 Python：%w", err)
+		return "", fmt.Errorf("Python 无法启动 / could not start: %w", err)
 	}
 	bindToApp(cmd)
 	s.mu.Lock()
@@ -290,7 +297,7 @@ func (s *server) start() (string, error) {
 	for time.Now().Before(deadline) {
 		select {
 		case <-s.done:
-			return "", errors.New("伺服器啟動後立即結束")
+			return "", errors.New("程序启动后马上结束了 / the server stopped right after starting")
 		default:
 		}
 		if resp, err := client.Get(addr); err == nil {
@@ -301,7 +308,7 @@ func (s *server) start() (string, error) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return "", errors.New("伺服器 30 秒內沒有回應")
+	return "", errors.New("程序 30 秒内没有回应 / the server did not answer within 30 s")
 }
 
 // stop asks the server to quit as the page's 退出 button does, and ends it

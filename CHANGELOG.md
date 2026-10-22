@@ -2,6 +2,20 @@
 
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.4.0] - 2026-10-22
+
+感谢 [@Ady0402](https://github.com/Ady0402) 制作桌面版（[PR #6](https://github.com/LiorMoment/darkslide-gr/pull/6)）。
+
+### 新增
+
+- **桌面版：双击就能用**：Mac（Apple 芯片、Intel 芯片）和 Windows 10/11 的安装包附在每个 Release 上。桌面版自带 Python，不用装 Python、不用开终端；打开后就是同一个页面，功能和脚本版相同，数据文件夹也相同，两种可以混用。「拟合」组件仍在第一次使用时下载，和脚本版一样。安装包没有苹果和微软的开发者签名，第一次打开要在系统里手动允许，做法写在 README 里。Windows 版只在 GitHub 的测试电脑上自动测过（[PR #6](https://github.com/LiorMoment/darkslide-gr/pull/6)）。
+- 发布 Release 时，GitHub 会在三个平台自动打包，把安装包和对应的 SHA-256 校验值附到 Release 上。
+- **自己的图标**：取景框角标框住 DS（DARKSLIDE 的缩写）。桌面版的程序坞、任务栏、浏览器标签页都换上了这个图标，桌面版启动时和 README 顶部用带「DARKSLIDE GR」小字的版本。
+
+### 其他
+
+- 桌面版的外壳采用 MIT 许可，和 DARKSLIDE GR 本体（GPL-2.0-only）是两个独立的程序；外壳和自带 Python 里各个组件的许可全文都随安装包附上，见 `desktop/` 和第三方材料说明。
+
 ## [1.3.3] - 2026-10-22
 
 感谢 [@Ady0402](https://github.com/Ady0402) 解决 Safari 生成时显示「Load failed」的问题（[PR #5](https://github.com/LiorMoment/darkslide-gr/pull/5)）。

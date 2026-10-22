@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" width="128" alt="DARKSLIDE GR"></p>
+
 # DARKSLIDE GR
 
 [简体中文](README.md) | English
@@ -137,6 +139,16 @@ The interface is available in 简体中文, 繁體中文, English, 日本語 and
 | ![Choose camera](docs/images/start.png) | ![Build result](docs/images/done.png) |
 
 ## Quick start
+
+### Desktop app (recommended, double-click to run)
+
+Download an installer from [Releases](https://github.com/LiorMoment/darkslide-gr/releases/latest): `mac-apple-silicon.dmg` for Apple-chip Macs, `mac-intel.dmg` for Intel Macs, `windows-setup.exe` for Windows 10/11. The app brings its own Python, so there is no terminal; it does the same as the script version below and uses the same data folder, so you can use both.
+
+- **The system stops it the first time**: the installers are not signed by Apple or Microsoft. On a Mac, close the warning, open System Settings › Privacy & Security and click "Open Anyway" near the bottom. On Windows, if "Windows protected your PC" appears, click "More info › Run anyway". After that it opens normally.
+- The Windows app has only been tested automatically on GitHub's machines, not yet by hand on a real Windows PC; Windows 10 needs WebView2 (Windows 11 has it).
+- The desktop app is made by [@Ady0402](https://github.com/Ady0402) ([#6](https://github.com/LiorMoment/darkslide-gr/pull/6)); its shell is MIT-licensed, see [`desktop/`](desktop/README.md).
+
+### Script version
 
 Requires Python 3.9 or newer. The basic features have no third-party dependencies.
 

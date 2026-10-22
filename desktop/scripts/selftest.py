@@ -321,7 +321,7 @@ def regions(firmware, manifest):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0], fromfile_prefix_chars="@")
-    ap.add_argument("app", help="the app's executable (Darkslide GR.exe, or Contents/MacOS/Darkslide GR)")
+    ap.add_argument("app", help="the app's executable (DARKSLIDE GR.exe, or Contents/MacOS/DARKSLIDE GR)")
     ap.add_argument("--firmware", help="an official fwdc239b.bin for the generate-and-download checks")
     ap.add_argument("--report", help="write what was made, as JSON, to compare platforms")
     ap.add_argument("--lut", action="append", metavar="PATH=NAME",

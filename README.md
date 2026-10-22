@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" width="128" alt="DARKSLIDE GR"></p>
+
 # DARKSLIDE GR
 
 简体中文 | [English](README.en.md)
@@ -136,6 +138,16 @@
 | ![选择相机](docs/images/start.png) | ![生成结果](docs/images/done.png) |
 
 ## 快速开始
+
+### 桌面版（推荐，双击即用）
+
+在 [Releases](https://github.com/LiorMoment/darkslide-gr/releases/latest) 下载安装包：Mac（Apple 芯片）选 `mac-apple-silicon.dmg`，Mac（Intel）选 `mac-intel.dmg`，Windows 10/11 选 `windows-setup.exe`。桌面版自带 Python，不用开终端；和下面的脚本版功能相同，数据文件夹也相同，两种可以混用。
+
+- **第一次打开会被系统拦住**：安装包没有苹果和微软的开发者签名。Mac 上会提示无法验证，先关掉提示，打开「系统设置 › 隐私与安全性」，在下方点「仍要打开」；Windows 上如果出现「Windows 已保护你的电脑」，点「更多信息 › 仍要运行」。之后就能正常打开。
+- Windows 版只在 GitHub 的测试电脑上自动测过，还没有在真实的 Windows 电脑上手动测过；Windows 10 需要已安装 WebView2（Windows 11 自带）。
+- 桌面版由 [@Ady0402](https://github.com/Ady0402) 制作（[#6](https://github.com/LiorMoment/darkslide-gr/pull/6)），外壳采用 MIT 许可，详见 [`desktop/`](desktop/README.md)。
+
+### 脚本版
 
 需要 Python 3.9 或更新版本，基本功能没有第三方依赖。
 
