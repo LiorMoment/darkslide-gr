@@ -6,6 +6,8 @@ let calls=[],pending=[],result=null,saved=true,shown=0;
 const ctx={$:node,clearTimeout(){},renderSaveState(){},toast(){},showPending(){},showResult:(ok,data)=>result={ok,data},Names:{ok:()=>true},nameMax:()=>12,
  state:{project:{id:'P',menu_language:'en',capabilities:{candidate_generation:true,full_firmware:false}},changes:{8:{film:'gold200'}},template:{slots:[]},status:{prefs:{preflight_seen:true}}},
  api:(...a)=>{calls.push(a);return new Promise((resolve,reject)=>pending.push({resolve,reject}));},
+ // Since PR #5 生成 is a job the page polls (apiJob); here it stands for the plain request it replaces.
+ apiJob:(pid,task,o)=>ctx.api('POST','/api/projects/'+pid+'/'+task,o.body),
  window:{DarkslideFilm:{fitPending:async()=>0}}};  // 生成 fits pending presets first (nothing pending here)
 vm.createContext(ctx);
 vm.runInContext(code.slice(code.indexOf('async function saveProject()'),code.indexOf('// ---------------------------------------------------------------- render')),ctx);

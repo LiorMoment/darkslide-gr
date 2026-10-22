@@ -106,6 +106,15 @@ class Projects(unittest.TestCase):
         with self.assertRaises(StoreError):
             self.store.create_project("x", "0" * 64, self.t)
 
+    def test_the_same_draft_again_changes_nothing(self):
+        # the page pushes its draft when it reloads; a 生成 running meanwhile must not see a change
+        pid = self.p["id"]
+        self.store.put_draft(pid, {"7": {"name": "Posi Warm"}}, self.t)
+        self.store.save(pid, self.t)
+        before = self.store.get_project(pid)
+        self.assertEqual(self.store.put_draft(pid, {"7": {"name": "Posi Warm"}}, self.t), before)
+        self.assertNotEqual(self.store.put_draft(pid, {"7": {"name": "Posi"}}, self.t), before)
+
     def test_draft_then_save(self):
         pid = self.p["id"]
         p = self.store.put_draft(pid, {"7": {"name": "Posi Warm"}}, self.t)

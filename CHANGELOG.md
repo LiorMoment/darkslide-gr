@@ -2,6 +2,16 @@
 
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.3.3] - 2026-10-22
+
+感谢 [@Ady0402](https://github.com/Ady0402) 解决 Safari 生成时显示「Load failed」的问题（[PR #5](https://github.com/LiorMoment/darkslide-gr/pull/5)）。
+
+### 修复
+
+- **用 Safari 生成或拟合不再显示「Load failed」**：Safari 等一个请求超过 60 秒就会放弃，比较慢的电脑（比如 Intel 芯片的 Mac）生成固件、拟合 LUT 时会失败。现在生成和拟合交给后台去做，页面每隔不到 1 秒问一次进度，每次请求都很短。生成出来的固件和以前逐字节相同（[PR #5](https://github.com/LiorMoment/darkslide-gr/pull/5)）。
+- **生成到一半刷新页面，可以接着等**：重新打开同一个工程时，页面会接上正在进行的生成，完成后照常显示结果。以前刷新页面时会自动再保存一次草稿，即使内容没变，正在进行的生成也会以为工程被改了而不输出文件；现在内容没变就不重写草稿。
+- 已经有一个生成在进行时再点生成，会提示「已有生成正在进行」，不会同时生成两份。
+
 ## [1.3.2] - 2026-10-22
 
 感谢 [@Ady0402](https://github.com/Ady0402) 让图标和关机画面在每个浏览器里都生成相同的结果（[PR #4](https://github.com/LiorMoment/darkslide-gr/pull/4)）。

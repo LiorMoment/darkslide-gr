@@ -38,7 +38,7 @@ class App:
             self.store.ensure_film_icons_dir()
         except OSError:
             pass  # the film list falls back to its drawn name plates
-        # One generation at a time, whether it comes in as a plain request or as a job.
+        # One 生成 job (or IIIx candidate) at a time; the plain /generate, which the page no longer uses, takes no lock.
         self.generation_lock = self.iiix_generation_lock = threading.Lock()
         self.long_jobs, self.long_jobs_lock = {}, threading.Lock()
         self.template = tpl.load(template_name)

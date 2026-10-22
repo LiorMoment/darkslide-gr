@@ -269,7 +269,10 @@ class Store:
     def put_draft(self, project_id, changes, template):
         path = self._dir(project_id)
         clean = self.validate_changes(project_id, changes, template, strict=False)
-        write_json(path / "draft.json", dict(changes=clean, updated_at=now()))
+        # The same draft again (the page pushes it when it closes or reloads) leaves the file alone:
+        # a 生成 running meanwhile checks the project did not change and would otherwise give up.
+        if read_json(path / "draft.json", {}).get("changes") != clean:
+            write_json(path / "draft.json", dict(changes=clean, updated_at=now()))
         return self.get_project(project_id)
 
     def save(self, project_id, template):
