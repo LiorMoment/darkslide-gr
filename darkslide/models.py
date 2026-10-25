@@ -73,6 +73,12 @@ def capabilities(model):
                 film_output=film_enabled, recipe_extension=False, candidate_generation=model == GR3X,
                 candidate_recipe_extension=model == GR3X and IIIX_RECIPE_MODULE, camera_fit=True,
                 photo_recipe_read=model == GR3X and IIIX_RECIPE_MODULE,
+                # Image Control menu order: both series sort it and write it into the camera (IIIx 1.60 holds
+                # the seven tables at the GR III 2.10 addresses with the same bytes; checked 2026-10-25).
+                menu_order=model in (GR3, GR3X), menu_order_write=model in (GR3, GR3X),
+                # 柔光 and the 65:24 wide ratio (whole-camera switches, see camera_features): 柔光 v22.6 is
+                # written for both series (2026-10-25); 65:24 is not built yet, so it cannot be on.
+                soft_glow=model in (GR3, GR3X), wide_ratio=False,
                 model=model.name, firmware=model.firmware, filename=model.filename,
                 note=(("支持 IIIx 完整候选生成；DNG 自动配方扩展可选；离线验证，机身待测" if IIIX_RECIPE_MODULE else
                        "支持 IIIx 完整候选生成（原位替换，不扩容）；离线验证，机身待测") if model == GR3X else

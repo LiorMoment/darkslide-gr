@@ -8,7 +8,7 @@ import hashlib
 import json
 import struct
 import time
-from . import models, fwread, package, package_inspect, compositor, composite_verify, rescue_gate
+from . import camera_features, models, fwread, package, package_inspect, compositor, composite_verify, rescue_gate
 from . import edit_core, generate, film_requests, film_profiles, film_writer, body_target, menu_language
 from . import gr3x_inplace, gr3x_inplace_integrity, gr3x_inplace_readback
 
@@ -123,7 +123,17 @@ def run(store, project, template, official, *, recipe_extension=False):
         raise generate.GenerateError('工程未保存或已改变')
     if models.for_project(saved)!=models.GR3X or models.for_template(template)!=models.GR3X:
         raise generate.GenerateError('候选仅适用于 IIIx 1.60')
-    if not saved.get('changes') and not recipe_extension:
+    pending = camera_features.refusal(saved.get('camera_features'))
+    if pending:   # 柔光 / 65:24 are not in the firmware generation yet: refused, never left out
+        raise generate.GenerateError(pending)
+    from . import menu_order
+    unreadable=saved.get('menu_order_unreadable') or (saved.get('draft') or {}).get('menu_order_unreadable')
+    if unreadable:
+        raise generate.GenerateError('已存的菜单顺序无法读取（%s），没有生成：请在「菜单顺序」里重新排好或恢复原厂顺序并保存' % unreadable)
+    try:order=menu_order.normalize(saved.get('menu_order'))
+    except menu_order.MenuOrderError as exc:raise generate.GenerateError('菜单顺序格式错误：%s' % exc) from exc
+    features=saved.get('camera_features') or {}
+    if not saved.get('changes') and order is None and not camera_features.edits(features) and not recipe_extension:
         raise generate.GenerateError('还没有改动')
     try:
         edit_core._template(template)
@@ -145,7 +155,7 @@ def run(store, project, template, official, *, recipe_extension=False):
         if menu_lang is not None:
             try:menu_language.validate(menu_lang)
             except menu_language.MenuLanguageError as exc:raise generate.GenerateError(str(exc))
-        edits=generate.edits_from_changes(store,saved['id'],effective,template,include_films=True,asset_snapshot=assets,menu_lang=menu_lang)
+        edits=generate.edits_from_changes(store,saved['id'],effective,template,include_films=True,asset_snapshot=assets,menu_lang=menu_lang,order=order,features=features)
         jpeg=assets[effective['shutdown']['asset']] if 'shutdown' in effective else None
         archive=None; extension={}; layout=LAYOUT
         if recipe_extension:
@@ -187,7 +197,7 @@ def run(store, project, template, official, *, recipe_extension=False):
             container_encoding="stored_frames" if recipe_extension else "preserve_original_frames_except_changes",
             decoded_growth_bytes=len(after)-len(before),curve_growth_bytes=0,firmware_layout=layout,
             checks=[dict(c,title=_iiix_title(c)) for c in checks],
-            summary=generate.summarize(effective,template,include_films=True),menu_language=menu_lang,features=sorted({e['kind'] for e in edits}|({'photo_recipe'} if recipe_extension else set())|({'shutdown'} if jpeg else set())),
+            summary=generate.summarize(effective,template,include_films=True,order=order,features=features),menu_language=menu_lang,features=sorted({e['kind'] for e in edits}|({'photo_recipe'} if recipe_extension else set())|({'shutdown'} if jpeg else set())),
             experimental=True,production_approved=False,camera_verified=False,product_download_enabled=True,
             film_data_revision=revision,body=report,recipe_extension=extension,verification=NOTE,
             rescue=dict(official_file=models.GR3X.filename,official_sha256=models.GR3X.input_sha,how='IIIx 实机安装及同版本回刷待验证'))
@@ -195,6 +205,11 @@ def run(store, project, template, official, *, recipe_extension=False):
             manifest['body']['shutdown_routes']=body_target.shutdown_report(body)
             if report.get('shutdown_conditional'):
                 manifest['body']['shutdown_routes']['conditional_request_3']=copy.deepcopy(report['shutdown_conditional'])
+        if features.get('soft_glow'):
+            manifest['verification']+=' '+generate.SOFT_GLOW_NOTE
+        if order is not None:
+            manifest['menu_order']=dict(order,video_policy=menu_order.VIDEO_POLICY)
+            manifest['verification']+=' 影像控制菜单的新顺序还没在 GR IIIx 上实测：刷后请看拍照、视频、RAW 显影里的列表顺序，选中后拍出的风格和名称是否一致，关机重开和 U1–U3 里存的风格有没有变。'
         if archive is not None:
             manifest['film_recipe_archive']=archive
             manifest['summary'].append(dict(preset='照片配方',what='DNG / JPEG 保存、RAW 恢复',value='仅完整快照；旧 RAW 恢复后导出 JPEG 原样保存历史配方；机身待测'))

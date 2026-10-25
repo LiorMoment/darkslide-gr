@@ -41,9 +41,15 @@ const confirm=async()=>{shown=0;const before=calls.length;await ctx.generate();a
  saved=true;calls=[];shown=0;ctx.state.untestedAck=false;node('iiixRecipeExtension').checked=false;ctx.state.changes={8:{film:'gold200'}};
  ctx.state.project={id:'P',menu_language:'en',camera_variant:'GR IIIx',capabilities:{candidate_generation:true,full_firmware:false}};
  p=ctx.generate();await tick();assert.equal(shown,0);assert.equal(calls.length,1);pending.shift().resolve({build_id:'D',project_id:'P'});await p;
+ // 2026-10-25: 柔光 / 菜单排序 are tested on GR III only, so the standard GR IIIx asks again when the build carries one.
+ calls=[];shown=0;ctx.state.untestedAck=false;ctx.state.features={soft_glow:true};
+ ctx.state.project={id:'P',menu_language:'en',camera_variant:'GR IIIx',capabilities:{candidate_generation:true,full_firmware:false}};
+ await ctx.generate();await tick();assert.equal(shown,1);assert.equal(calls.length,0);
+ assert.equal(node('untestedFeatures').hidden,false);assert.equal(node('untestedVariant').hidden,true);assert.equal(node('untestedFeatureNames').textContent,'柔光');
+ ctx.state.features={};
  for(const variant of ['GR IIIx Urban Edition','GR IIIx HDF']){
   calls=[];ctx.state.untestedAck=false;ctx.state.project={id:'P',menu_language:'en',camera_variant:variant,capabilities:{candidate_generation:true,full_firmware:false}};
   await confirm();
  }
- console.log('PASS candidate UI: untested-risk confirmation every time (not for the camera-tested standard GR IIIx), recipe module off by capability, explicit extension when on, empty restore-only, saved-state barrier, project switch isolation');
+ console.log('PASS candidate UI: untested-risk confirmation every time (not for the camera-tested standard GR IIIx unless 柔光/排序 are in the build), recipe module off by capability, explicit extension when on, empty restore-only, saved-state barrier, project switch isolation');
 })().catch(e=>{console.error(e);process.exitCode=1});

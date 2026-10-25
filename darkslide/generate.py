@@ -8,7 +8,7 @@ import copy
 import hashlib
 import json
 
-from . import body_target, composite_verify, compositor, fwread, names, pngcheck, rescue_gate, film_requests, template as tpl, menu_language
+from . import body_target, camera_features, composite_verify, compositor, fwread, menu_order, names, pngcheck, rescue_gate, film_requests, template as tpl, menu_language
 
 
 # Display titles for the composite checker's ids (presentation only).
@@ -28,6 +28,8 @@ CHECK_TITLES = {
     "payload_sha": "解码数据 SHA 与生成记录一致",
     "readback_icons_names": "读回 14 个预设的图标和预设名（英文、简中、繁中、日文）",
     "grain_menu_expected": "负片颗粒菜单项、原九项和相邻字符串独立核对",
+    "menu_order_tables": "影像控制菜单顺序：三组拍照表、三组视频表和 RAW 显影选项表与所选顺序一致（独立核对）",
+    "soft_glow_windows": "柔光 v22.6：两个柔光模块、图像管线挂钩和 ADJ 图标与交付的测试固件逐字节一致（独立核对）",
     "film_requested_data": "胶片记录、矩阵和完整曲线与所选数据一致",
     "film_code_fields_and_targets": "胶片跳转、选择和后矩阵指令独立核对",
     "film_unselected_and_original_protected": "未选胶片槽位和受保护原厂数据保持不变",
@@ -52,7 +54,7 @@ def slot_keys(changes):
 
 
 def edits_from_changes(store, project_id, changes, template, *, include_films=False, asset_snapshot=None,
-                       menu_lang=None):
+                       menu_lang=None, order=None, features=None):
     edits = []
     for key in slot_keys(changes):
         slot = tpl.slot(template, int(key))
@@ -79,11 +81,26 @@ def edits_from_changes(store, project_id, changes, template, *, include_films=Fa
     except film_requests.FilmRequestError as exc:
         raise GenerateError(str(exc)) from exc
     if include_films or film_requests.available():edits.extend(films)
+    try:
+        order = menu_order.normalize(order)
+    except menu_order.MenuOrderError as exc:
+        raise GenerateError("菜单顺序格式错误：%s" % exc) from exc
+    if order is not None:
+        if not menu_order.supported(template):
+            raise GenerateError(menu_order.refusal(template))
+        edits.append(menu_order.edit_for(order))
+    edits.extend(camera_features.edits(features))
     return edits
 
 
-def summarize(changes, template, *, include_films=False):
+def summarize(changes, template, *, include_films=False, order=None, features=None):
     out = []
+    if (features or {}).get("soft_glow"):
+        out.append(dict(slot=None, preset="柔光", what="整台相机", value="打开（v22.6）：在 ADJ 里开关柔光"))
+    if order is not None:
+        out.append(dict(slot=None, preset="影像控制菜单", what="菜单顺序",
+                        value="%s，自定义 1、2 在最后；视频列表跟着照片顺序（原本就没有柔和单色和 HDR 色调）" %
+                        "、".join(menu_order.names_in_order(order, template, changes))))
     if "shutdown" in changes:
         size = changes["shutdown"].get("bytes")
         out.append(dict(slot=None, preset="关机画面", what="关机图",
@@ -101,6 +118,11 @@ def summarize(changes, template, *, include_films=False):
         if "film" in changes[key] and (include_films or film_requests.available()):
             out.append(dict(slot=slot["no"], preset=slot["name"], what="胶片", value=changes[key]["film"]))
     return out
+
+
+# 柔光 v22.6: what has and has not been on a camera (both generation routes add it).
+SOFT_GLOW_NOTE = ("柔光用的是 v22.6：柔光效果和用户在普通 GR III 上实测没问题的 v22.4 逐字节相同；"
+                  "v22.6 新画的 ADJ 柔光图标、柔光和其他改动一起装、GR IIIx 和 HDF 机身上的柔光都还没实测。")
 
 
 # Presets whose icon / name changes have been flashed and checked on a GR III so far.
@@ -137,6 +159,10 @@ def verification_note(edits, template, body=None, has_shutdown=False):
     if untested:
         names = "、".join(tpl.slot(template, no)["name"] for no in untested)
         note += "这次改到的 " + names + " 是新开放的预设，还没在相机上实测：刷后请看影像控制菜单、拍摄画面、回放详情，以及其他菜单里有没有意外出现你改的名称或图标。"
+    if any(e["kind"] == "soft_glow" for e in edits):
+        note += SOFT_GLOW_NOTE
+    if any(e["kind"] == "menu_order" for e in edits):
+        note += "影像控制菜单的新顺序在普通 GR III 上已实测，其他机身还没有：刷后请看拍照、视频、RAW 显影里的列表顺序，选中后拍出的风格和名称是否一致，关机重开和 U1–U3 里存的风格有没有变。"
     if any(e["kind"] == "film" for e in edits):
         note += "用户已反馈普通 GR III 的 Gold 200、Portra 400、Ektar 100、5219 四卷候选实测正常，测试项目未逐项记录；不代表本次配置或其他机型均已实测，离线读回不能证明实际成像效果。"
     if body_target.is_hdf(body):
@@ -159,7 +185,22 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
     if project.get("unsaved"):
         raise GenerateError("有未保存的改动，请先保存（⌘S）")
     changes = project.get("changes") or {}
-    if not changes:
+    # A saved order this version cannot use is never replaced by the factory order behind the user's back.
+    unreadable = project.get("menu_order_unreadable") or (project.get("draft") or {}).get("menu_order_unreadable")
+    if unreadable:
+        raise GenerateError("已存的菜单顺序无法读取（%s），没有生成：请在「菜单顺序」里重新排好或恢复原厂顺序并保存" % unreadable)
+    try:
+        order = menu_order.normalize(project.get("menu_order"))
+    except menu_order.MenuOrderError as exc:
+        raise GenerateError("菜单顺序格式错误：%s" % exc) from exc
+    if order is not None and not menu_order.supported(template):
+        raise GenerateError(menu_order.refusal(template))
+    # 柔光 / 65:24 are not in the firmware generation yet: a project with one on is refused, never left out.
+    pending = camera_features.refusal(project.get("camera_features"))
+    if pending:
+        raise GenerateError(pending)
+    camera_on = project.get("camera_features") or {}
+    if not changes and order is None and not camera_features.edits(camera_on):
         raise GenerateError("还没有改动")
     # The page only enables 生成 once a menu language is chosen; a project without one
     # (older projects, direct API callers) keeps the 1.0.0 behaviour (Simplified Chinese).
@@ -177,7 +218,7 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
     # writing and independent readback observe the same request inputs.
     profiles_snapshot=copy.deepcopy(film_profiles)
     edits = edits_from_changes(store, project["id"], changes, template, include_films=inplace, asset_snapshot=asset_snapshot,
-                               menu_lang=menu_lang)
+                               menu_lang=menu_lang, order=order, features=camera_on)
     custom_hashes={}
     if profiles_snapshot is not None and (inplace or film_requests.available()):
         try:
@@ -233,7 +274,7 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
         output_filename="fwdc239b.bin",
         payload_sha256_before=result["payload_sha256_before"],
         payload_sha256_after=result["payload_sha256_after"],
-        version_word=result["version_word"], summary=summarize(changes, template, include_films=inplace),
+        version_word=result["version_word"], summary=summarize(changes, template, include_films=inplace, order=order, features=camera_on),
         menu_language=menu_lang,
         features=features, payload_changes=result["payload_changes"],
         container=result["container"], builder=result["builder"], checks=checks,
@@ -246,6 +287,8 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
         manifest["feature"] = "shutdown" if features == ["shutdown"] else "composite"
         manifest["shutdown"] = dict(jpeg_bytes=len(jpeg), slot_bytes=result["shared_capacity"],
                                     requests=result["request_ids"], path=result["shared_path"])
+    if order is not None:
+        manifest["menu_order"] = dict(order, video_policy=menu_order.VIDEO_POLICY)
     if custom_hashes:
         manifest["custom_film_profiles_sha256"]=custom_hashes
     return result["output"], manifest

@@ -69,3 +69,29 @@
 `darkslide/film_inplace_cache.py` 延续采用上述固定提交 `make_slots16.py` 的零表身份核对与八个指针重定位部分（MIT，Copyright (c) 2026 idontknownihil）；由 LiorMoment 修改为四位置部分安装、严格身份检查及稀疏窗口计划。来源、原文件哈希和修改范围见 `darkslide/_vendor/gr3_zero_table_source.json`，许可全文仍见 `GR3_FILM_MODS_LICENSE.txt`。重复矩阵的无损重建为本项目实现。未采用 GR IV 数据或上游整包构建器。
 
 - GR IIIx 1.60 的只读稀疏核对复用同一 33 节点与零表方案，绑定 IIIx 官方输入与独立读回；来源记录见 `darkslide/gr3x_inplace_sources.json`，上述 MIT 许可及数据 CC BY-SA 许可继续保留。照片配方扩展 1.0 不提供。
+
+## 7. 界面图标
+
+拖动排序时的爪印指针（`web/app.css` 里的 `--paw` 与 `--paw-grab`）取自 **Phosphor Icons** 的 `paw-print`（fill）图标，@phosphor-icons/core 2.1.1，https://github.com/phosphor-icons/core ，MIT License，Copyright (c) 2023 Phosphor Icons。由 LiorMoment 修改：重新配色、加深色描边，并把四个趾头拆开、向内收拢，做成拖动时的"抓取"样子。
+
+MIT License
+
+Copyright (c) 2023 Phosphor Icons
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

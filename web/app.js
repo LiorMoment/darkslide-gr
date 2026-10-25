@@ -11,6 +11,9 @@ const state = {
   factory: null,
   project: null,
   changes: {},
+  order: null,     // 相机菜单顺序：12 个固定预设号；null = 原厂顺序
+  features: {},    // 柔光 / 65:24 宽幅：整台相机的开关，开着的才有键（soft_glow, wide_ratio）
+  orderProblem: null,  // 已存的菜单顺序读不出时服务器给的原因；用户动过顺序或保存后清掉
   sel: 7,
   undo: [],
   redo: [],
@@ -117,6 +120,15 @@ function listedSlots() {
   const neg = slotOf(12), at = slots.findIndex((s) => s.no === 7);
   if (neg && at >= 0) slots.splice(at + 1, 0, neg);
   return neg && at < 0 ? state.template.slots : slots;
+}
+// Once the user sorts the camera's Image Control menu the list follows that order (user, 2026-10-15),
+// 自定义 1/2 last; with the factory order it stays as above. Identities never move.
+// Since the column is where the menu is sorted (user, 2026-10-24), a model that can be sorted always lists
+// the camera's own menu order, the factory one included (负片 then sits before 正片, as in the camera).
+function sidebarSlots() {
+  const order = orderOn() && (state.order || ((state.status && state.status.menu_order) || {}).factory_still);
+  if (!order) return listedSlots();
+  return order.map(slotOf).concat(state.template.slots.filter((s) => s.no > 12));
 }
 const editable = (slot, what) => slot[what] === "test" || slot[what] === "open";
 const assetUrl = (asset) => "/api/projects/" + state.project.id + "/assets/" + asset;
@@ -372,6 +384,11 @@ async function loadProject(p) {
   if (cameraButton.disabled && state.view === "camera") state.view = "split";
   $("outputVersion").textContent = state.template.firmware + "（不变）";
   state.changes = JSON.parse(JSON.stringify(p.draft.changes || {}));
+  state.order = window.DarkslideOrder.fromServer(p.draft.menu_order);
+  state.features = Object.assign({}, p.draft.camera_features || {});
+  // A stored order the server could not read is shown as the factory order and left alone on disk
+  // until the user moves a preset, restores the factory order or saves (which clears it).
+  state.orderProblem = p.draft.menu_order_unreadable || null;
   state.undo = [];
   state.redo = [];
   state.enterSlots = true;
@@ -382,6 +399,9 @@ async function loadProject(p) {
   try { state.factory = await api("GET", "/api/factory/" + p.input_sha256); } catch (e) { state.factory = null; }
   show("viewWork");
   renderAll();
+  if (state.orderProblem) toast(`已存的菜单顺序无法读取，已按原厂顺序显示，保存后会清除（${state.orderProblem}）`, true);
+  else if (p.draft.menu_order_fallback) toast(`草稿里的菜单顺序无法读取，已改用上次保存的顺序（${p.draft.menu_order_fallback}）`, true);
+  else if (p.menu_order_unreadable) toast(`上次保存的菜单顺序无法读取，保存后会换成现在的顺序（${p.menu_order_unreadable}）`, true);
   window.DarkslideFilm.load(p.id);
   maybeGuide("work");
   resumeGeneration(p.id);
@@ -433,20 +453,31 @@ function maybeGuide(flow) {
   }));
 }
 
-// Workbench (1.0, F35): the "1.0 新增" card once, then the 5-step preset-editing guide.
-// 以后再说 closes both for good; the "?" on the editing page or Settings replays them.
+// Workbench (F35, 下一版): the "这一版新增" card once, then a 2-step tour of 菜单排序 / 柔光, then (for
+// someone who never had it) the 5-step preset-editing guide. 以后再说 closes them all for good; the "?" on the
+// editing page or Settings replays the tour and the editing guide. Whoever saw the 1.0 card still gets this one.
 function maybeWorkGuide() {
   const prefs = (state.status && state.status.prefs) || {};
   if (prefs.guide_off || window.DarkslideGuide.active()) return;
-  if (!prefs.guide_v1_news_seen) {
+  if (!prefs.guide_v2_news_seen) {
     requestAnimationFrame(() => !window.DarkslideGuide.active() && window.DarkslideGuide.start("news", async (forever, how) => {
-      if (forever) { await setPrefs([["guide_v1_news_seen", true], ["guide_off", true]]); return; }
-      if (how === "next") { await setPref("guide_v1_news_seen", true); startEditorGuide(); }
-      else await setPrefs([["guide_v1_news_seen", true], ["guide_editor_seen", true]]);
+      if (forever) { await setPrefs([["guide_v2_news_seen", true], ["guide_v1_news_seen", true], ["guide_off", true]]); return; }
+      await setPrefs([["guide_v2_news_seen", true], ["guide_v1_news_seen", true]]);
+      if (how === "next") startTour(() => { if (!prefs.guide_editor_seen) startEditorGuide(); });
+      else if (!prefs.guide_editor_seen) await setPref("guide_editor_seen", true);
     }));
   } else if (!prefs.guide_editor_seen) {
     requestAnimationFrame(() => !window.DarkslideGuide.active() && startEditorGuide());
   }
+}
+
+// The new-feature tour; then() runs only when it was gone through to the end.
+function startTour(then) {
+  if (state.feature !== "ic") { state.feature = "ic"; renderAll(); }
+  requestAnimationFrame(() => window.DarkslideGuide.start("tour", async (forever, how) => {
+    await setPrefs([["guide_tour_seen", true], ...(forever ? [["guide_off", true]] : [])]);
+    if (!forever && how === "next" && then) then();
+  }));
 }
 
 function startEditorGuide() {
@@ -460,7 +491,41 @@ function startEditorGuide() {
 }
 
 // ---------------------------------------------------------------- changes
-function snapshot() { return JSON.stringify(state.changes); }
+function snapshot() { return JSON.stringify({ c: state.changes, o: state.order, f: state.features }); }
+
+function restore(snap) {
+  const v = JSON.parse(snap);
+  state.changes = v.c;
+  state.order = v.o;
+  state.features = v.f || {};
+}
+
+// 柔光 / 65:24 宽幅 (whole-camera switches, user 2026-10-24). A switch can only be turned on when the model's
+// capability allows it; until the firmware side is built that is never, and the switch stays greyed.
+const CAMERA_FEATURES = [["soft_glow", "柔光", "softSwitch"], ["wide_ratio", "65:24 宽幅", "ratioSwitch"]];
+function setFeature(name, on) {
+  if (on && !featureOn(name)) { toast("这项功能还在研发，暂时不能装进相机", true); return; }
+  state.undo.push(snapshot());
+  if (state.undo.length > 200) state.undo.shift();
+  state.redo = [];
+  const next = Object.assign({}, state.features);
+  if (on) next[name] = true; else delete next[name];
+  state.features = next;
+  scheduleDraft();
+  renderAll();
+}
+
+// The menu order is one undo step per move, like any other edit. Only null or the 12 presets once each.
+function setOrder(order) {
+  if (!window.DarkslideOrder.valid(order)) { toast("菜单顺序数据不对，没有改动（请重新调整）", true); return; }
+  state.orderProblem = null;  // the user has now decided about the order
+  state.undo.push(snapshot());
+  if (state.undo.length > 200) state.undo.shift();
+  state.redo = [];
+  state.order = order;
+  scheduleDraft();
+  renderAll();
+}
 
 function mutate(fn) {
   state.undo.push(snapshot());
@@ -544,7 +609,7 @@ function undo() {
   if (!state.undo.length) return;
   onNameInput.depth = -1;
   state.redo.push(snapshot());
-  state.changes = JSON.parse(state.undo.pop());
+  restore(state.undo.pop());
   scheduleDraft();
   renderAll();
 }
@@ -553,7 +618,7 @@ function redo() {
   if (!state.redo.length) return;
   onNameInput.depth = -1;
   state.undo.push(snapshot());
-  state.changes = JSON.parse(state.redo.pop());
+  restore(state.redo.pop());
   scheduleDraft();
   renderAll();
 }
@@ -568,7 +633,7 @@ function scheduleDraft() {
 
 async function pushDraft() {
   try {
-    const p = await api("PUT", "/api/projects/" + state.project.id + "/draft", { changes: state.changes });
+    const p = await api("PUT", "/api/projects/" + state.project.id + "/draft", draftBody());
     state.project = p;
     state.draftState = p.unsaved ? "草稿已自动保存" : "已保存";
   } catch (e) {
@@ -581,13 +646,14 @@ async function pushDraft() {
 async function saveProject() {
   clearTimeout(state.saveTimer);
   const projectId = state.project.id;
-  const changes = JSON.parse(JSON.stringify(state.changes));
+  const before = JSON.stringify(draftBody(true)), body = JSON.parse(before);
   try {
-    await api("PUT", "/api/projects/" + projectId + "/draft", { changes });
+    await api("PUT", "/api/projects/" + projectId + "/draft", body);
     if (!state.project || state.project.id !== projectId) return false;
     const p = await api("POST", "/api/projects/" + projectId + "/save");
-    if (!state.project || state.project.id !== projectId || JSON.stringify(state.changes) !== JSON.stringify(changes)) return false;
+    if (!state.project || state.project.id !== projectId || JSON.stringify(draftBody(true)) !== before) return false;
     state.project = p;
+    if (state.orderProblem && "menu_order" in body) { state.orderProblem = null; renderAll(); }
     state.draftState = "已保存 " + p.saved_at.slice(11, 16);
     const flash = $("saveState").parentElement;
     flash.classList.remove("flash"); void flash.offsetWidth; flash.classList.add("flash");
@@ -597,6 +663,36 @@ async function saveProject() {
   } catch (e) { if (state.project && state.project.id === projectId) toast(e.message, true); }
   renderSaveState();
   return false;
+}
+
+// Image Control menu order: only where the project's model can be sorted (GR III 2.10, ordinary and HDF).
+function orderOn() { return !!(state.project && state.project.capabilities && state.project.capabilities.menu_order); }
+// Whether the order goes into the camera when generating (GR III); GR IIIx only sorts and saves it for now.
+function orderWrites() { return !!(state.project && state.project.capabilities && state.project.capabilities.menu_order_write); }
+// 柔光 / 65:24: whether the model can take the switch yet, and whether this server knows the switches at all.
+function featureOn(name) { return !!(state.project && state.project.capabilities && state.project.capabilities[name]); }
+function featuresKnown() { return !!(state.project && state.project.capabilities && "soft_glow" in state.project.capabilities); }
+
+// Every draft write (autosave, ⌘S, quit, page close) sends this. menu_order null = back to the factory
+// order. The key is left out, so the server keeps what it has, when the model cannot be sorted, when the
+// order in the page is not a usable one (never sent, so renames and the rest still save), and while a
+// stored order the server could not read waits for the user. save = true (⌘S, and so 生成) is the
+// confirmation the notice asks for: it sends the order shown, which clears the unreadable one.
+function draftBody(save) {
+  const body = { changes: state.changes };
+  if (featuresKnown()) body.camera_features = Object.assign({}, state.features);
+  if (!orderOn()) {
+    if (state.orderProblem && save) body.menu_order = null;
+    return body;
+  }
+  if (state.orderProblem && !save) return body;
+  const order = window.DarkslideOrder.payload(state.order);
+  if (order !== undefined) body.menu_order = order;
+  return body;
+}
+function hasEdits() {
+  return Object.keys(state.changes).length > 0 || (orderOn() && window.DarkslideOrder.payload(state.order) != null) ||
+    Object.keys(state.features || {}).length > 0;
 }
 
 // ---------------------------------------------------------------- render
@@ -611,6 +707,7 @@ function renderAll() {
   renderParams();
   renderChanges();
   renderSaveState();
+  window.DarkslideOrder.render();
 }
 
 function renderBanner() {
@@ -643,10 +740,15 @@ function focusedIndex(container) {
 
 function renderSlots() {
   // A vertical preset list. Every preset opens; inside, only what this preset allows is enabled.
+  // Rows are also dragged here to sort the camera menu: mid-drag the list on screen is left as the drag
+  // has put it, and the drag redraws it when it ends.
+  if (window.DarkslideOrder.dragging()) return;
   setTimeout(() => { state.enterSlots = false; }, 0);
-  const hadFocus = focusedIndex($("slots"));
+  // Focus stays on the same preset (not the same row): sorting can move it.
+  const list = $("slots"), focused = focusedIndex(list);
+  const focusedSlot = focused === null ? null : list.children[focused].getAttribute("data-slot");
   $("slotCount").textContent = state.template.slots.length;
-  $("slots").replaceChildren(...listedSlots().map((s, i) => {
+  list.replaceChildren(...sidebarSlots().map((s, i) => {
     const locked = !editable(s, "icon") && !editable(s, "rename");
     const edit = state.changes[s.no];
     const what = editable(s, "rename") ? "图标和预设名可改" : editable(s, "icon") ? "仅图标可改" : "暂不开放";
@@ -654,17 +756,22 @@ function renderSlots() {
     return el("button", {
       class: "slot open" + (s.no === state.sel ? " on" : "") + (state.enterSlots ? " enter" : ""),
       style: state.enterSlots ? "animation-delay:" + i * 20 + "ms" : null,
+      "data-slot": s.no,
       role: "option", "aria-selected": s.no === state.sel ? "true" : "false",
-      title: s.name + " · " + what + (window.DarkslideFilm.SLOTS.includes(s.no) ? " · 可换胶片 LUT，写进相机" : ""),
-      onclick: () => { state.sel = s.no; renderAll(); },
+      title: [s.name, what, window.DarkslideFilm.SLOTS.includes(s.no) ? "可换胶片 LUT，写进相机" : "", window.DarkslideOrder.hint(s.no)].filter(Boolean).join(" · "),
+      onclick: () => { if (window.DarkslideOrder.swallowClick()) return; state.sel = s.no; renderAll(); },
     }, [
+      window.DarkslideOrder.grip(s.no),
       window.DarkslideFilm.SLOTS.includes(s.no) ? el("span", { class: "slot-lut mono", text: "LUT", "aria-hidden": "true" }) : null,
       slotIcon(s, "abbr"),
       el("span", { class: "slot-name", text: edit && edit.name !== undefined ? edit.name : s.name }),
       tag ? el("span", { class: "slot-tag", text: tag }) : null,
     ]);
   }));
-  refocus($("slots"), hadFocus);
+  if (focusedSlot !== null) {
+    const button = Array.from(list.children).find((b) => b.getAttribute("data-slot") === focusedSlot);
+    if (button) button.focus({ preventScroll: true });
+  }
 }
 
 function renderEditor() {
@@ -792,6 +899,28 @@ function renderChanges() {
       el("button", { "aria-label": "撤销关机画面改动", text: "×", onclick: (e) => leaveThen(e, () => setShutdown(undefined)) }),
     ]));
   }
+  if (state.orderProblem) {
+    rows.unshift(el("div", { class: "change pending", "data-key": "order" }, [
+      el("span", { class: "thumb dashed", text: "序" }),
+      el("span", { class: "txt" }, [el("span", { text: "影像控制菜单顺序 · 无法读取" }), el("span", { text: "→ 已按原厂顺序显示，保存后会清除" })]),
+      orderOn() ? el("button", { "aria-label": "按原厂顺序确认菜单顺序", text: "×", onclick: (e) => leaveThen(e, () => setOrder(null)) }) : null,
+    ]));
+  } else if (orderOn() && state.order) {
+    const d = window.DarkslideOrder.describe(state.order);
+    rows.unshift(el("div", { class: "change", "data-key": "order" }, [
+      el("span", { class: "thumb", text: "序" }),
+      el("span", { class: "txt" }, [el("span", { text: "影像控制菜单顺序 · 未实测" }), el("span", { text: `→ ${d.moved} 个预设换了位置，第一个是${d.first}` })]),
+      el("button", { "aria-label": "恢复原厂菜单顺序", text: "×", onclick: (e) => leaveThen(e, () => setOrder(null)) }),
+    ]));
+  }
+  for (const [name, label] of CAMERA_FEATURES.slice().reverse()) {
+    if (!state.features[name]) continue;
+    rows.unshift(el("div", { class: "change", "data-key": "feature-" + name }, [
+      el("span", { class: "thumb", text: name === "soft_glow" ? "柔" : "宽" }),
+      el("span", { class: "txt" }, [el("span", { text: label }), el("span", { text: "→ 装进相机，在相机里开关" })]),
+      el("button", { "aria-label": "不装" + label, text: "×", onclick: (e) => leaveThen(e, () => setFeature(name, false)) }),
+    ]));
+  }
   const known = state.knownRows;
   for (const r of rows) if (known && !known.has(r.dataset.key)) r.classList.add("enter");
   state.knownRows = new Set(rows.map((r) => r.dataset.key));
@@ -799,7 +928,8 @@ function renderChanges() {
   $("changeCount").textContent = "本次改动 · " + n;
   $("genCount").textContent = rows.filter((r) => !r.classList.contains("pending")).length + " 项";
   const np = presetKeys().length;
-  $("changeSlots").textContent = [np ? np + " 个预设" : "", sd ? "关机画面" : ""].filter(Boolean).join(" · ");
+  $("changeSlots").textContent = [np ? np + " 个预设" : "", sd ? "关机画面" : "", state.orderProblem || (orderOn() && state.order) ? "菜单顺序" : "",
+    state.features.wide_ratio ? "画幅" : "", state.features.soft_glow ? "柔光" : ""].filter(Boolean).join(" · ");
   $("changeList").replaceChildren(...(rows.length ? rows : [el("div", { class: "empty", text: "还没有改动" })]));
   // the list scrolls inside the fixed sidebar: bring a newly added change into view
   const fresh = $("changeList").querySelector(".change.enter");
@@ -1125,17 +1255,35 @@ async function generate() {
     return e && e.name !== undefined && !Names.ok(e.name, nameMax(s));
   });
   if (bad.length) { toast(bad.map((s) => s.name).join("、") + " 的预设名没有通过检查", true); return; }
-  if (!Object.keys(state.changes).length && !recipeExtension) { toast("还没有改动", true); return; }
+  // Generating saves first, which would clear a stored order that could not be read: the user decides first.
+  if (state.orderProblem) {
+    toast(orderOn() ? "已存的菜单顺序无法读取：请先在左栏重新拖好顺序或点「恢复原厂」，或按 ⌘S 保存（会按原厂顺序清除它），再生成"
+      : "已存的菜单顺序无法读取：请先按 ⌘S 保存（会按原厂顺序清除它），再生成", true);
+    return;
+  }
+  // GR IIIx sorts and saves an order, but cannot write it yet: say so here instead of skipping it.
+  if (orderOn() && !orderWrites() && window.DarkslideOrder.payload(state.order) != null) {
+    toast("GR IIIx 的菜单顺序还在适配，暂时不能写进相机。要生成的话，请先在左栏点「恢复原厂」。", true);
+    return;
+  }
+  if (!hasEdits() && !recipeExtension) { toast("还没有改动", true); return; }
   if (!(state.status.prefs || {}).preflight_seen) {
     $("preflightRecovery").textContent = candidate
       ? "本次为 GR IIIx 1.60 固件，官方原件为 fwdc243b.bin；标准版已有用户实机刷入使用，城市版、HDF 和刷回官方 1.60 尚未实机验证。"
       : "准备一张只放官方 2.10 原件 fwdc239b.bin 的救机卡。";
     $("preflightDialog").showModal(); return;
   }
-  // IIIx models other than the standard one (tested on a camera by a user) ask again every time.
-  if (candidate && state.project.camera_variant !== "GR IIIx" && !state.untestedAck) {
+  // IIIx models other than the standard one (tested on a camera by a user) ask again every time; so does
+  // every IIIx when the build carries 菜单排序 or 柔光, which are tested on GR III only (已适配·未实测).
+  const fresh = [orderOn() && window.DarkslideOrder.payload(state.order) != null ? "菜单排序" : "",
+    (state.features || {}).soft_glow ? "柔光" : ""].filter(Boolean);
+  const untestedVariant = state.project.camera_variant !== "GR IIIx";
+  if (candidate && (untestedVariant || fresh.length) && !state.untestedAck) {
     const body = state.project.camera_variant || state.project.target_body || "";
     $("untestedBody").textContent = body ? "（这次是 " + body + "）" : "";
+    $("untestedVariant").hidden = !untestedVariant;
+    $("untestedFeatures").hidden = !fresh.length;
+    $("untestedFeatureNames").textContent = fresh.join("、");
     $("untestedExtension").hidden = !recipeExtension;
     $("untestedBox").checked = false;
     $("untestedOk").disabled = true;
@@ -1201,6 +1349,8 @@ function showPending() {
   $("doneTag").textContent = "正在生成";
   $("doneTitle").textContent = "正在生成并核对…";
   $("doneText").textContent = "从官方原件重新生成，然后用另一套代码拆开读回、逐项核对。根据组合可能需要几十秒到几分钟。";
+  // The rescue line shows while generating too: name this series' official version, not 2.10 for GR IIIx.
+  $("doneRescueFw").textContent = (state.template && state.template.firmware) || "2.10";
   $("doneTable").replaceChildren();
   $("doneChecks").replaceChildren();
   $("doneMore").hidden = true;
@@ -1275,6 +1425,9 @@ function guideChecks(summary) {
   if (looks.length) out.push(looks.join("、") + " 的图标和名字");
   for (const x of summary.filter((x) => x.what === "颗粒项")) out.push(x.preset + "的颗粒档位");
   if (summary.some((x) => x.what === "关机图")) out.push("关一次机，看关机画面");
+  if (summary.some((x) => x.what === "菜单顺序")) out.push("影像控制菜单的顺序（拍照、视频、RAW 显影都看），选中后风格和名字对得上");
+  // 柔光: assign it to an ADJ slot first (it does not take one by itself), then look at the icon and the effect.
+  if (summary.some((x) => x.preset === "柔光")) out.push("在「ADJ 模式设定」里把柔光放进一个槽，按 ADJ 看柔光图标清不清楚；关和强各拍一张，看亮处有没有晕开");
   out.push("卡再格式化一次，删掉更新文件");
   return out;
 }
@@ -1301,13 +1454,16 @@ function setShutdown(value) {
 }
 
 const SOON = {
-  ratio: ["画幅", "", "开发中", "正在研究怎么在 GR III 上新增画幅比例，还不能用。原厂的 3:2、4:3、1:1、16:9 请在相机里选，这里暂时没有可改的内容。"],
   date: ["日期印记", "", "计划中", "机内能不能在照片上印日期还没有研究，这里暂时没有可改的内容。"],
 };
 
+// Rail entries. 画幅 and 柔光 are settings of the whole camera, not of a preset (user, 2026-10-24):
+// each has its own page showing how it is used in the camera. A switch can be turned on when the model's
+// capability says so (柔光 since 2026-10-25); 画幅 is still in development and stays off.
+const FEATURES = [["featIC", "ic"], ["featShutdown", "shutdown"], ["featRatio", "ratio"], ["featSoft", "soft"], ["featDate", "date"]];
 function renderFeature() {
   const f = state.feature;
-  for (const [id, key] of [["featIC", "ic"], ["featShutdown", "shutdown"], ["featRatio", "ratio"], ["featDate", "date"]]) {
+  for (const [id, key] of FEATURES) {
     $(id).classList.toggle("on", f === key);
     if (f === key) $(id).setAttribute("aria-current", "page"); else $(id).removeAttribute("aria-current");
   }
@@ -1315,6 +1471,20 @@ function renderFeature() {
   $("paneIC").hidden = f !== "ic";
   $("adjustPanel").hidden = f !== "ic";
   $("paneShutdown").hidden = f !== "shutdown";
+  $("paneRatio").hidden = f !== "ratio";
+  $("paneSoft").hidden = f !== "soft";
+  for (const [name, , id] of CAMERA_FEATURES) {
+    const sw = $(id), ready = featureOn(name);
+    sw.disabled = !ready;
+    sw.setAttribute("aria-checked", state.features[name] ? "true" : "false");
+    for (const badge of document.querySelectorAll('[data-dev="' + name + '"]')) badge.hidden = ready;
+  }
+  // 柔光 is camera-tested on the ordinary GR III only; GR IIIx and HDF bodies say so before generating.
+  const softNote = !featureOn("soft_glow") ? "" :
+    state.template && state.template.model === "GR IIIx" ? "柔光在 GR IIIx 上已适配、未实测：离线核对都通过了，还没有人在 GR IIIx 上刷过。" :
+    /HDF/.test((state.project && state.project.target_body) || "") ? "HDF 机身和普通 GR III 用同一个 2.10 固件；柔光在 HDF 机身上已适配、未实测。" : "";
+  $("softBodyNote").textContent = softNote;
+  $("softBodyNote").hidden = !softNote;
   $("paneSoon").hidden = !SOON[f];
   if (SOON[f]) {
     const [title, sub, badge, text] = SOON[f];
@@ -1337,7 +1507,7 @@ function renderPresetCard() {
   else icon.textContent = s.abbr;
   const grainStage = ((state.status.detail || {}).grain || {})[String(s.no)] || "closed";
   const grain = grainStage === "factory" ? "颗粒 · 原厂已有" : "颗粒 " + (edit.grain === true ? "开" : "关");
-  if ($("pcardChips")) $("pcardChips").replaceChildren(...[edit.film ? "胶片 · " + window.DarkslideFilm.nameOf(edit.film) : "原厂效果", grain, "柔光 关", "详细设置 · 相机里调"].map((t) => el("span", { class: "chip-s", text: t })));
+  if ($("pcardChips")) $("pcardChips").replaceChildren(...[edit.film ? "胶片 · " + window.DarkslideFilm.nameOf(edit.film) : "原厂效果", grain, "详细设置 · 相机里调"].map((t) => el("span", { class: "chip-s", text: t })));
 }
 
 // The preview shows the user's own photo only (kept in this tab, never uploaded);
@@ -1576,9 +1746,10 @@ async function applyShutdown() {
 }
 
 function wireShutdown() {
-  for (const [id, key] of [["featIC", "ic"], ["featShutdown", "shutdown"], ["featRatio", "ratio"], ["featDate", "date"]]) {
+  for (const [id, key] of FEATURES) {
     $(id).addEventListener("click", () => { state.feature = key; renderAll(); });
   }
+  for (const [name, , id] of CAMERA_FEATURES) $(id).addEventListener("click", () => setFeature(name, !state.features[name]));
   for (const b of $("sdViewBtns").children) b.addEventListener("click", () => { sdView = b.dataset.view; renderShutdown(); });
   $("sampleEmpty").addEventListener("click", (e) => { e.stopPropagation(); $("sceneInput").click(); });
   $("sampleBefore").addEventListener("click", openZoom);
@@ -1657,6 +1828,31 @@ function wire() {
   $("btnFit").addEventListener("click", () => window.DarkslideFilm.fitNow(slotOf(state.sel), state.changes[state.sel] || {}));
   $("btnPull").addEventListener("click", () => window.DarkslideFilm.pullNow(slotOf(state.sel), state.changes[state.sel] || {}));
   window.DarkslideRecipe.wire(toast);
+  window.DarkslideOrder.wire({
+    status: () => state.status,
+    get: () => state.order,
+    set: setOrder,
+    supported: orderOn,
+    redraw: renderSlots,
+    // GR IIIx (2026-10-24: both series get sorting): the same column, waiting for its menu tables to be checked.
+    unsupported: () => `${(state.template && state.template.model) || "这个型号"} 的菜单排序还在适配中，暂时不能拖动`,
+    // HDF bodies run the same GR III 2.10 package, so the tables are the same; still untested there.
+    note: () => {
+      if (!orderWrites()) return "GR IIIx 可以先排好、存进工程；写进相机还在适配，生成前要先点「恢复原厂」。";
+      // GR IIIx 1.60 writes the order too (same seven tables as GR III 2.10, checked 2026-10-25).
+      if (state.template && state.template.model === "GR IIIx") return "GR IIIx 的菜单表和 GR III 位置、内容都一样；在 GR IIIx 上还没实测。";
+      const body = (state.project && state.project.target_body) || "";
+      return /HDF/.test(body) ? body + " 和普通 GR III 用同一个 2.10 固件，菜单表在同一位置；在 HDF 机身上同样未实测。" : "";
+    },
+    problem: () => state.orderProblem,
+    fixed: () => state.template.slots.filter((s) => s.no > 12).map((s) => s.no),
+    label: (no) => {
+      const s = slotOf(no), edit = state.changes[no] || {};
+      const renamed = edit.name !== undefined;
+      const sub = [renamed ? `原 ${s.name}` : "", edit.film ? "胶片 · " + window.DarkslideFilm.nameOf(edit.film) : ""].filter(Boolean).join(" · ");
+      return { name: renamed ? edit.name : s.name, sub, icon: slotIcon(s, "abbr") };
+    },
+  });
   $("btnRecipe").addEventListener("click", async () => {
     // card icon: the user's own icon, else the film's name plate, else the preset's factory icon
     const edit = state.changes[state.sel] || {}, img = $("pcardIcon").querySelector("img");
@@ -1736,9 +1932,9 @@ function wire() {
   });
   $("settingsClose").addEventListener("click", () => $("settingsDialog").close());
   $("btnOpenRescue").addEventListener("click", () => { $("settingsDialog").close(); show("viewRescue"); window.scrollTo(0, 0); });
-  $("btnEditorGuide").addEventListener("click", () => startEditorGuide());
+  $("btnEditorGuide").addEventListener("click", () => startTour(startEditorGuide));
   $("btnGuideReset").addEventListener("click", async () => {
-    for (const k of ["guide_off", "guide_start_seen", "guide_work_seen", "guide_v1_news_seen", "guide_editor_seen"]) await setPref(k, false);
+    for (const k of ["guide_off", "guide_start_seen", "guide_work_seen", "guide_v1_news_seen", "guide_v2_news_seen", "guide_tour_seen", "guide_editor_seen"]) await setPref(k, false);
     $("settingsDialog").close();
     toast("指引已重新打开");
     if (!$("viewWork").hidden && state.feature !== "ic") { state.feature = "ic"; renderAll(); }
@@ -1767,7 +1963,7 @@ async function quitApp() {
   try {
     if (state.project) {
       clearTimeout(state.saveTimer);
-      await api("PUT", "/api/projects/" + state.project.id + "/draft", { changes: state.changes });
+      await api("PUT", "/api/projects/" + state.project.id + "/draft", draftBody());
     }
     await api("POST", "/api/quit");
   } catch (e) {

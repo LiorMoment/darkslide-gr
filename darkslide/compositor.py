@@ -1,5 +1,5 @@
 """Compose reviewed edits on one official payload and pack exactly once."""
-from . import edit_core as builder, a_shutdown, grain_menu, film_requests, models
+from . import edit_core as builder, a_shutdown, grain_menu, film_requests, menu_order, models, soft_glow
 
 class CompositeError(ValueError):
     pass
@@ -46,9 +46,10 @@ def _build(official, edits, template, jpeg=None, *, film_profiles=None, film_lay
         builder._template(template)
         model = models.get(template.get("id"))
         builder._require(not inplace or model == models.GR3, "GR III inplace compositor only")
-        builder._require(type(edits) is list and len(edits) <= 28 and
+        # Up to 28 edits as before; the menu order and 柔光 (at most one each) come on top.
+        builder._require(type(edits) is list and len(edits) <= 30 and
                          (bool(edits) or jpeg is not None), 'no requested changes')
-        regular, grains, films = [], [], []
+        regular, grains, films, menus, glows = [], [], [], [], []
         for edit in edits:
             builder._require(type(edit) is dict, 'edit object')
             if edit.get('kind') == 'film':
@@ -56,8 +57,19 @@ def _build(official, edits, template, jpeg=None, *, film_profiles=None, film_lay
             elif edit.get('kind') == 'grain_menu':
                 grain_menu.validate_request(edit)
                 grains.append(edit)
+            elif edit.get('kind') == 'menu_order':
+                menus.append(menu_order.request_from_edit(edit))
+            elif edit.get('kind') == 'soft_glow':
+                soft_glow.validate_request(edit)
+                glows.append(edit)
             else:
                 regular.append(edit)
+        builder._require(len(menus) <= 1, 'duplicate menu order edit')
+        builder._require(len(glows) <= 1, 'duplicate soft glow edit')
+        builder._require(len(edits) - len(menus) - len(glows) <= 28, 'too many edits')
+        builder._require(not glows or model in (models.GR3, models.GR3X), '柔光只支持 GR III 2.10 和 GR IIIx 1.60')
+        # The seven menu tables are only known for the GR III 2.10 package (ordinary and HDF bodies).
+        builder._require(not menus or menu_order.supported(template), menu_order.UNSUPPORTED)
         builder._require(len(regular)+len(grains)<=24, 'too many regular edits')
         film_requests.validate_batch(films)
         if films and not inplace and not film_requests.available():
@@ -75,6 +87,14 @@ def _build(official, edits, template, jpeg=None, *, film_profiles=None, film_lay
             _merge_delta(before, merged, declared, ranges, changed, changes)
         if grains:
             changed, changes = grain_menu.apply(before) if model == models.GR3 else grain_menu.apply(before, model.id)
+            _merge_delta(before, merged, declared, ranges, changed, changes)
+        if menus:
+            # Seven tables, 78 bytes; the checksum word stays with packing.
+            changed, changes = menu_order.apply(before, menus[0], template)
+            _merge_delta(before, merged, declared, ranges, changed, changes)
+        if glows:
+            # 柔光 v22.6: fixed windows; any overlap with another feature is refused by _merge_delta.
+            changed, changes = soft_glow.apply(before, model.id)
             _merge_delta(before, merged, declared, ranges, changed, changes)
         if films:
             builder._require(model == models.GR3, "IIIx films require dedicated checked adapter")
@@ -99,7 +119,7 @@ def _build(official, edits, template, jpeg=None, *, film_profiles=None, film_lay
         result = builder._pack_payload(official, before, frames, stop, footer, bytes(merged), declared) if model == models.GR3 else builder._pack_payload(official, before, frames, stop, footer, bytes(merged), declared, model.id)
         result.update(film_layout=film_layout if films else None, decoded_growth_bytes=0,
                       features=sorted({e['kind'] for e in edits} | ({'shutdown'} if jpeg is not None else set())),
-                      shutdown=shutdown, compositor='Darkslide one-payload compositor v02 (negative grain)',
+                      shutdown=shutdown, compositor='Darkslide one-payload compositor v04 (negative grain, menu order, soft glow)',
                       candidate_file_written=False, camera_verified=False, exportable=False,
                       device_installation_verified=False,
                       independent_entropy_decode_required=jpeg is not None)
@@ -107,5 +127,6 @@ def _build(official, edits, template, jpeg=None, *, film_profiles=None, film_lay
             result.update(shared_capacity=shutdown['capacity'],
                           request_ids=shutdown['request_ids'], shared_path=shutdown['shared_path'])
         return result
-    except (builder.BuildError, a_shutdown.AShutdownError, film_requests.FilmRequestError) as exc:
+    except (builder.BuildError, a_shutdown.AShutdownError, film_requests.FilmRequestError,
+            menu_order.MenuOrderError) as exc:
         raise CompositeError(str(exc)) from exc

@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | English
 
-Give four presets on your GR III / GR IIIx a film look each, or **your own LUT**; add your own preset icons, preset names and shutdown screen, and turn on grain for Negative Film, right from a browser on your own computer.
+Give four presets on your GR III / GR IIIx a film look each, or **your own LUT**; add your own preset icons, preset names and shutdown screen, turn on grain for Negative Film, reorder the Image Control menu and add soft glow to the whole camera, right from a browser on your own computer.
 
 ![DARKSLIDE GR editor](docs/images/editor.png)
 
@@ -14,6 +14,7 @@ Give four presets on your GR III / GR IIIx a film look each, or **your own LUT**
 > - Your camera may fail to boot, stop working properly, or be **permanently bricked**. You may also lose warranty and official support.
 > - The author has flashed and tested it on **one** GR III (firmware 2.10): icons and preset names for all 12 open presets (including names lengthened to the limit), the shutdown screen, Negative Film grain, several changes together, and flashing the official 2.10 original back afterwards, with no problems found. That is a sample of one camera, and your own icons, preset names and pictures have never been on real hardware; all pre-build checks run offline and are no substitute for testing on hardware.
 > - The 1.0 film writing was also tested once with four films on one regular GR III; the author found no problems, but the item-by-item record is not finished, and your film combination may never have been tested. The GR III HDF was tested on one camera by user @Ady0402 (generating, flashing, films, preset names and the Traditional Chinese menu all worked, and film presets are no longer over-exposed). The standard GR IIIx was flashed and used normally on one camera by a user. The GR III Street and Diary editions and the GR IIIx Urban and HDF editions have **not been tested on real hardware**; you confirm the risk before generating.
+> - The menu order and soft glow added in 1.5 were flashed together with four films on one regular GR III; the author found no problems, but the item-by-item record is not finished. On the GR IIIx (including the standard one) and on HDF bodies they are "adapted, not camera-tested"; a GR IIIx build that uses either asks you to confirm the risk every time.
 > - This project is not affiliated with or endorsed by RICOH. The author accepts no liability for any damage.
 > - What DARKSLIDE GR produces is a firmware file, nothing more: it **does not talk to your camera or touch your memory card**. Flashing it, and how, is your call.
 >
@@ -96,7 +97,7 @@ Good to know:
 - **An approximation, not a copy**: the match is a colour difference computed on a model of the camera, not a real photo. LUTs with extreme shadows, highlights or colours come out further off.
 - The first fit needs a one-time download of a 12–16 MB component (see "The 拟合 (fit) component" below). Without it nothing is checked automatically; 拟合 or 生成 asks before downloading.
 - Fit results are saved with the project, tied to that LUT and your camera's original, and reused next time.
-- For the GR IIIx Urban and HDF editions every build asks you to confirm they are untested; the standard GR IIIx is tested and needs no confirmation.
+- For the GR IIIx Urban and HDF editions every build asks you to confirm they are untested; the standard GR IIIx is tested and needs no confirmation (except when the build uses the menu order or soft glow, see below).
 
 **Presets with a film share the Standard preset's in-camera adjustments**
 
@@ -112,6 +113,23 @@ To see a film as it is, after flashing:
 2. Set every adjustable item back to 0; note the old values if you want them back later.
 3. Switch to a preset with a film and shoot: what you see is the film's own look.
 4. To fine-tune on top of the film later, change Standard's values; they affect Standard and every preset with a film.
+
+**Image Control menu order (new in 1.5)**
+
+Drag presets up and down in the left column; that order is the order of the camera's Image Control menu.
+
+- The movie Image Control list and the style list in RAW development follow the photo order (movies have no Soft Monotone or HDR Tone to begin with).
+- Names, icons and films stay with their preset; you move the whole preset. Custom 1 and 2 stay at the end. "Reset to factory" restores the original order.
+- Only the camera's seven order tables change; nothing grows.
+- **Tested so far**: tested on a regular GR III. The GR IIIx 1.60 menu tables sit at the same place with the same contents as on GR III 2.10, so the same writer is used; on the GR IIIx and HDF bodies it is "adapted, not camera-tested".
+
+**Soft glow (new in 1.5)**
+
+One switch for the whole camera: once installed, the camera gets a "Soft glow" item you set to off, weak, medium or strong in the shooting menu or with the ADJ shortcut, like a diffusion filter in front of the lens that makes bright areas bloom. All presets share one setting.
+
+- The page shows both ways to use it, the menu and the ADJ shortcut. Soft glow does not take an ADJ slot by itself: first put it into a slot under the camera's "ADJ mode setting".
+- JPEG only; RAW sensor data is unchanged. It can be generated together with films, icons, preset names, the shutdown screen and the menu order. Nothing grows and the firmware version stays the same.
+- **Tested so far**: tested on a regular GR III, including together with the menu order and four films. On the GR IIIx and HDF bodies it is "adapted, not camera-tested", and a GR IIIx build that uses soft glow or the menu order asks you to confirm it is untested every time (the standard GR IIIx too). RAW+JPEG, burst and movies have not been tested specifically.
 
 **Negative Film grain**
 

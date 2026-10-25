@@ -55,16 +55,22 @@
     <nav class="rail" aria-label="功能">
       <button class="rail-item" id="featIC" data-feature="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v12H4zM8 7l1.5-2h5L16 7M12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg><span>影像控制</span></button>
       <button class="rail-item" id="featShutdown" data-feature="shutdown"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8M7 6a7 7 0 1 0 10 0"/></svg><span>关机画面</span></button>
-      <button class="rail-item" id="featRatio" data-feature="ratio" disabled title="开发中，暂时不能打开"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14h14M3 7h14v14"/></svg><span>画幅</span><span class="rail-tag mono">开发中</span></button>
+      <button class="rail-item" id="featRatio" data-feature="ratio" title="画幅：新增 65:24（研发中）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14h14M3 7h14v14"/></svg><span>画幅</span><span class="rail-tag mono" data-dev="wide_ratio">研发中</span></button>
+      <button class="rail-item" id="featSoft" data-feature="soft" title="柔光：关 · 弱 · 中 · 强"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></svg><span>柔光</span><span class="rail-tag mono" data-dev="soft_glow">研发中</span></button>
       <button class="rail-item" id="featDate" data-feature="date" disabled title="计划中，暂时不能打开"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg><span>日期印记</span><span class="rail-tag mono">计划中</span></button>
-      <button class="rail-item" id="featSoft" disabled title="研发中，暂时不能打开"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></svg><span>柔光</span><span class="rail-tag mono">研发中</span></button>
       <div class="grow"></div>
       <a class="rail-item rail-rescue" href="#" id="rescueLink"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg><span>救机说明</span></a>
     </nav>
 
     <nav class="plist" id="plist" aria-label="预设">
       <div class="plist-head mono">影像控制 · <span id="slotCount">14</span></div>
+      <div class="order-bar" id="orderBar"><span class="order-state" id="orderState">菜单顺序 · 原厂</span><button type="button" class="btn xs ghost order-reset" id="orderReset" disabled>恢复原厂</button></div>
+      <span class="xsmall dim2 order-unsupported" id="orderUnsupported" hidden></span>
       <div id="slots" role="listbox" aria-label="预设"></div>
+      <p class="xsmall dim2 order-hint" id="orderHint" title="视频模式的列表跟着这里的顺序（视频本来就没有柔和单色和 HDR 色调），RAW 显影里的列表也一起变；改过的预设名、图标和胶片都跟着预设一起移动。">拖动预设可调整相机菜单顺序（手机上按住 ⠿ 拖）；视频和 RAW 显影的列表跟着变。在普通 GR III 上已实测，GR IIIx 和 HDF 机身<b>未实测</b>。</p>
+      <p class="xsmall order-hint order-problem" id="orderProblem" role="status" hidden></p>
+      <p class="xsmall dim2 order-hint" id="orderBodyNote" hidden></p>
+      <div class="sr-only" id="orderLive" aria-live="polite"></div>
     </nav>
 
     <main class="bench" aria-label="操作台">
@@ -132,10 +138,6 @@
               <span class="v1-mini-hint" id="grainHint"></span>
               <span id="grainBadge" hidden></span><span id="grainLabel" hidden></span>
             </div>
-            <div class="v1-mini off" aria-disabled="true">
-              <div class="v1-mini-row"><span class="v1-mini-title">柔光</span><button class="switch" role="switch" aria-checked="false" aria-label="柔光开关（研发中）" disabled><span></span></button></div>
-              <span class="v1-mini-hint">类似柔光镜的光晕，研发中。</span>
-            </div>
           </div>
         </section>
 
@@ -196,6 +198,189 @@
             <div class="hint soft">上传后自动裁成 3:2，拖动可以调整取景范围。尺寸、格式和压缩都按原厂规格自动转换，不用设置。</div>
           </div>
           <div class="card notes-card"><ul class="notes" id="sdNotes"></ul></div>
+        </section>
+      </div>
+
+      <!-- 画幅与柔光：都是整台相机的设置，不分预设（用户 2026-10-24）。写进固件还在研发，开关先灰着。 -->
+      <div id="paneRatio" class="pane" hidden>
+        <section class="pcard" aria-label="概要">
+          <div class="pcard-main">
+            <div class="pcard-title"><span>画幅</span></div>
+            <div class="chips"><span class="chip-s">新增 65:24</span><span class="chip-s">3:2 · 1:1 · 16:9 保留</span><span class="chip-s">所有预设共用</span></div>
+          </div>
+          <span class="badge outline mono" data-dev="wide_ratio">研发中</span>
+        </section>
+        <section class="cards one" aria-label="设置">
+          <div class="card">
+            <div class="switch-row"><button class="switch" role="switch" aria-checked="false" id="ratioSwitch" aria-label="把 65:24 宽幅装进相机（研发中）" disabled><span></span></button><span>把 65:24 宽幅装进相机</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>在相机里怎么用</span><span class="dim2 xsmall">示意图</span></div>
+            <div class="howto-flow">
+              <div class="flow-label">方法一：菜单</div>
+              <div class="howto">
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span class="mn-num">6</span><span>拍摄菜单</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="mn-list"><div class="mn-row"><span>文件格式</span><span class="mn-val">RAW+</span></div><div class="mn-row on"><span>长宽比</span><span class="mn-val">3:2 ›</span></div><div class="mn-row"><span>裁切</span><span class="mn-val">关</span></div><div class="mn-row"><span>影像控制</span><span class="mn-val">标准</span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>1</b><span>拍摄菜单 → 长宽比</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span>长宽比</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="mn-list"><div class="mn-row"><span>3:2</span><span class="mn-val"></span></div><div class="mn-row"><span>1:1</span><span class="mn-val"></span></div><div class="mn-row"><span>16:9</span><span class="mn-val"></span></div><div class="mn-row on"><span>65:24</span><span class="mn-val"></span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>2</b><span>选 65:24，按 OK</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd live">
+                  <div class="lv-scene"></div>
+                  <div class="lv-mask top" style="height: 31.5%"></div><div class="lv-mask bottom" style="height: 31.5%"></div>
+                  <div class="lv-frame" style="top: 31.5%; bottom: 31.5%"></div>
+                  <div class="lv-tag mono">65:24</div>
+                </div>
+                <figcaption><b>3</b><span>取景出现宽幅框</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd photo"><div class="ph-strip"><div class="lv-scene"></div></div><div class="ph-size mono">6000 × 2216</div></div>
+                <figcaption><b>4</b><span>照片就是 65:24</span></figcaption>
+              </figure>
+              </div>
+            </div>
+            <div class="howto-flow">
+              <div class="flow-label">方法二：ADJ 快捷键</div>
+              <div class="howto">
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span class="mn-num">2</span><span>操作自定义</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div><div class="mn-list"><div class="mn-row"><span>重命名</span><span class="mn-val"></span></div><div class="mn-row"><span>…</span><span class="mn-val"></span></div><div class="mn-row on"><span>ADJ模式</span><span class="mn-val">›</span></div><div class="mn-row"><span>Fn按钮设定</span><span class="mn-val"></span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>1</b><span>C → 操作自定义 → ADJ模式</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span>设定5</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="mn-list"><div class="mn-row"><span>对焦</span><span class="mn-val"></span></div><div class="mn-row"><span>文件格式</span><span class="mn-val"></span></div><div class="mn-row on"><span>长宽比</span><span class="mn-val"></span></div><div class="mn-row"><span>裁切</span><span class="mn-val"></span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>2</b><span>选一个设定，换成长宽比</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd live">
+                  <div class="lv-scene"></div><div class="lv-mask top" style="height: 31.5%"></div><div class="lv-mask bottom" style="height: 31.5%"></div><div class="lv-frame" style="top: 31.5%; bottom: 31.5%"></div>
+                  <div class="adj-name"><span>长宽比</span><span>65:24</span></div>
+                  <div class="adj-icons"><span class="adj-ic">◐</span><span class="adj-ic">Focus</span><span class="adj-ic on">⤡</span><span class="adj-ic">File</span><span class="adj-ic">WB</span></div>
+                  <div class="adj-values"><span>3:2</span><span>1:1</span><span>16:9</span><span class="on">65:24</span></div>
+                  <div class="adj-foot"><span class="mn-key">Fn</span><span><span class="mn-key">OK</span>确定</span></div>
+                </div>
+                <figcaption><b>3</b><span>按 ADJ，选长宽比和 65:24</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd photo"><div class="ph-strip"><div class="lv-scene"></div></div><div class="ph-size mono">6000 × 2216</div></div>
+                <figcaption><b>4</b><span>照片就是 65:24</span></figcaption>
+              </figure>
+              </div>
+            </div>
+            <ul class="soft-steps howto-notes">
+              <li>相机里叫「长宽比」，切回 3:2、1:1、16:9 随时可以。</li>
+              <li>JPEG 尺寸：L 6000×2216 · M 4800×1776 · S 3360×1240 · XS 1920×712；RAW 保留完整画面。</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <div id="paneSoft" class="pane" hidden>
+        <section class="pcard" aria-label="概要">
+          <div class="pcard-main">
+            <div class="pcard-title"><span>柔光</span></div>
+            <div class="chips"><span class="chip-s">亮处像加了柔光镜</span><span class="chip-s">关 · 弱 · 中 · 强</span><span class="chip-s">所有预设共用</span></div>
+          </div>
+          <span class="badge outline mono" data-dev="soft_glow">研发中</span>
+        </section>
+        <section class="cards one" aria-label="设置">
+          <div class="card">
+            <div class="switch-row"><button class="switch" role="switch" aria-checked="false" id="softSwitch" aria-label="把柔光装进相机" disabled><span></span></button><span>把柔光装进相机</span></div>
+            <div class="hint soft">装进相机后，开关和强弱在相机里调。</div>
+            <div class="hint soft" id="softBodyNote" hidden></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>在相机里怎么用</span><span class="dim2 xsmall">示意图</span></div>
+            <div class="howto-flow">
+              <div class="flow-label">方法一：菜单</div>
+              <div class="howto">
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span class="mn-num">6</span><span>拍摄菜单</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="mn-list"><div class="mn-row"><span>文件格式</span><span class="mn-val">RAW+</span></div><div class="mn-row"><span>长宽比</span><span class="mn-val">3:2</span></div><div class="mn-row"><span>影像控制</span><span class="mn-val">标准</span></div><div class="mn-row on"><span>柔光</span><span class="mn-val">关 ›</span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>1</b><span>拍摄菜单 → 柔光</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span>柔光</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="mn-list"><div class="mn-row"><span>关</span><span class="mn-val"></span></div><div class="mn-row"><span>弱</span><span class="mn-val"></span></div><div class="mn-row on"><span>中</span><span class="mn-val"></span></div><div class="mn-row"><span>强</span><span class="mn-val"></span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>2</b><span>选档位，按 OK</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="glow-pair">
+                  <div class="glow-demo"><i></i><span class="mono">关</span></div>
+                  <div class="glow-demo strong"><i></i><span class="mono">强</span></div>
+                </div>
+                <figcaption><b>3</b><span>亮处晕开</span></figcaption>
+              </figure>
+              </div>
+            </div>
+            <div class="howto-flow">
+              <div class="flow-label">方法二：ADJ 快捷键</div>
+              <div class="howto">
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span class="mn-num">2</span><span>操作自定义</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div><div class="mn-list"><div class="mn-row"><span>重命名</span><span class="mn-val"></span></div><div class="mn-row"><span>…</span><span class="mn-val"></span></div><div class="mn-row on"><span>ADJ模式</span><span class="mn-val">›</span></div><div class="mn-row"><span>Fn按钮设定</span><span class="mn-val"></span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>1</b><span>C → 操作自定义 → ADJ模式</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd mn">
+                  <div class="mn-title"><span>设定3</span></div>
+                  <div class="mn-body"><div class="mn-tabs"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="mn-list"><div class="mn-row"><span>对焦</span><span class="mn-val"></span></div><div class="mn-row"><span>文件格式</span><span class="mn-val"></span></div><div class="mn-row"><span>长宽比</span><span class="mn-val"></span></div><div class="mn-row on"><span>柔光</span><span class="mn-val"></span></div></div></div>
+                  <div class="mn-foot"><span class="mn-key">MENU</span><span class="mn-key">OK</span></div>
+                </div>
+                <figcaption><b>2</b><span>选一个设定，换成柔光</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="cam-lcd live">
+                  <div class="lv-scene night"></div>
+                  <div class="adj-name"><span>柔光</span><span>中</span></div>
+                  <div class="adj-icons"><span class="adj-ic">◐</span><span class="adj-ic">Focus</span><span class="adj-ic on"><i class="glow-ico"></i></span><span class="adj-ic">File</span><span class="adj-ic">WB</span></div>
+                  <div class="adj-values"><span>强</span><span class="on">中</span><span>弱</span><span>关</span></div>
+                  <div class="adj-foot"><span class="mn-key">Fn</span><span><span class="mn-key">OK</span>确定</span></div>
+                </div>
+                <figcaption><b>3</b><span>按 ADJ，选柔光和档位</span></figcaption>
+              </figure>
+              <figure class="howto-step">
+                <div class="glow-pair">
+                  <div class="glow-demo"><i></i><span class="mono">关</span></div>
+                  <div class="glow-demo strong"><i></i><span class="mono">强</span></div>
+                </div>
+                <figcaption><b>4</b><span>亮处晕开</span></figcaption>
+              </figure>
+              </div>
+            </div>
+            <ul class="soft-steps howto-notes">
+              <li>ADJ 是快捷键：放进去后拍照时一按就能换，不用进菜单。</li>
+              <li>所有预设共用一个档位，关机后还在。</li>
+              <li>取景时看不到效果，看拍出来的照片；只作用于 JPEG，RAW 不变。</li>
+            </ul>
+          </div>
         </section>
       </div>
 
@@ -534,10 +719,12 @@
   </div>
 </dialog>
 
+
 <dialog id="untestedDialog" class="dialog">
-  <div class="dialog-head"><span>这款 GR IIIx 还没在真机上实测过</span></div>
+  <div class="dialog-head"><span>这次生成的内容还没在这款 GR IIIx 上实测过</span></div>
   <ol class="preflight">
-    <li>GR IIIx 城市版和 HDF<b id="untestedBody"></b>目前只做了离线核对：安装、开机、菜单、拍出来的颜色，以及刷回官方 1.60 救机，都还没在真机上验证过（标准版已有用户实机刷入使用）。</li>
+    <li id="untestedVariant">GR IIIx 城市版和 HDF<b id="untestedBody"></b>目前只做了离线核对：安装、开机、菜单、拍出来的颜色，以及刷回官方 1.60 救机，都还没在真机上验证过（标准版已有用户实机刷入使用）。</li>
+    <li id="untestedFeatures" hidden>这次用到的<b id="untestedFeatureNames"></b>在 GR IIIx 上已适配、未实测：离线核对都通过了，但还没有人在 GR IIIx 上刷过。在普通 GR III 上已实测。</li>
     <li id="untestedExtension" hidden>你勾选了「保存配方、RAW 恢复」模块：它会在固件里追加一段程序，固件的程序区会变大，这一部分同样没有实测。</li>
     <li>刷之前请准备一张只放官方 1.60 原件 fwdc243b.bin 的救机卡。如果刷坏到按住 MENU 开机也进不了更新画面，目前没有已验证的恢复办法。</li>
   </ol>
@@ -569,6 +756,7 @@
 <script src="adjust.js"></script>
 <script src="film.js"></script>
 <script src="recipe.js"></script>
+<script src="order.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

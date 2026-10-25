@@ -20,7 +20,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import models, body_target, film_luts, film_requests, jpegcheck, names, pngcheck, shared_shutdown, template as tpl, menu_language
+from . import camera_features, models, body_target, film_luts, film_requests, jpegcheck, menu_order as menu_orders, names, pngcheck, shared_shutdown, template as tpl, menu_language
 from .identify import digest_of
 
 PROJECT_ID = re.compile(r"^p_[0-9a-f]{12}$")
@@ -34,6 +34,74 @@ SHUTDOWN_BUDGET = shared_shutdown.CAPACITY - 4
 
 class StoreError(ValueError):
     pass
+
+
+# put_draft(..., menu_order=KEEP) leaves the draft's menu order as it is
+# (older clients send only `changes`).
+KEEP = object()
+
+# Where the Image Control menu order lives (F31):
+#   project.json / versions/<n>.json  "menu_order": the saved order; absent = factory order.
+#   draft.json  "menu_order": the order being edited, always written by this version (null = factory
+#               order). A draft without the key was written by a version that does not know menu
+#               orders (1.0.0 writes only `changes` and `updated_at`): it stands for the saved order,
+#               so opening a project in 1.0.0 and coming back never drops the saved order.
+# A stored order that cannot be read never blocks the project: it is reported, shown as the factory
+# order and left on disk as it is until the user sends an order (null included) or saves.
+
+
+def clean_menu_order(value, template=None):
+    """Validated Image Control menu order, or None for the factory order. A present
+    but broken value is an error, never silently reset. The movie list follows the
+    photo order. With a template, a model that cannot be sorted refuses any order."""
+    try:
+        order = menu_orders.normalize(value)
+    except menu_orders.MenuOrderError as exc:
+        raise StoreError("菜单顺序格式错误：%s" % exc) from None
+    if not menu_orders.follows_still(order):
+        raise StoreError("视频菜单顺序必须跟着拍照顺序（去掉柔和单色和 HDR 色调）")
+    if order is not None and template is not None and not menu_orders.editable(template):
+        raise StoreError(menu_orders.UNSUPPORTED)
+    return order
+
+
+def _with_order(record, order):
+    """Copy of a project/draft/version record carrying `order` (absent = factory)."""
+    out = {k: v for k, v in record.items() if k != "menu_order"}
+    if order is not None:
+        out["menu_order"] = order
+    return out
+
+
+def draft_order_value(draft, project):
+    """The order (as stored, unchecked) a draft stands for: its own "menu_order" when it has the key,
+    else the project's saved one (the draft was written by a version that does not know menu orders)."""
+    return draft["menu_order"] if "menu_order" in draft else project.get("menu_order")
+
+
+def read_order(value, sortable=None):
+    """(order, None) for a usable stored order, (None, reason) for one that cannot be used here:
+    not a valid order, or an order on a model that cannot be sorted (sortable False; None = unknown)."""
+    try:
+        order = clean_menu_order(value)
+    except StoreError as exc:
+        return None, str(exc)
+    if order is not None and sortable is False:
+        return None, menu_orders.UNSUPPORTED
+    return order, None
+
+
+camera_features_mod = camera_features
+
+
+def camera_features_of(value, template):
+    """柔光 / 65:24 switches that are on, checked against what the template's model can take."""
+    try:
+        model = models.for_template(template)
+    except (ValueError, TypeError, AttributeError, KeyError):
+        model = None
+    caps = models.capabilities(model) if model is not None else {}
+    return camera_features.clean(value, caps)
 
 
 def now():
@@ -193,7 +261,8 @@ class Store:
             draft = read_json(item.parent / "draft.json", {})
             out.append(dict(id=value.get("id"), title=value.get("title"), saved_at=value.get("saved_at"),
                             input_sha256=value.get("input_sha256"), target_body=value.get("target_body"),
-                            updated_at=draft.get("updated_at"), changes=len(draft.get("changes", {}))))
+                            updated_at=draft.get("updated_at"),
+                            changes=len(draft.get("changes", {})) + (1 if draft_order_value(draft, value) else 0)))
         return sorted(out, key=lambda p: p.get("updated_at") or "", reverse=True)
 
     def delete_project(self, project_id):
@@ -211,13 +280,53 @@ class Store:
         return len(mine)
 
     def get_project(self, project_id):
+        """The saved project with its draft. `draft["menu_order"]` is the order to show (null = factory
+        order). An order that cannot be read does not stop the project from opening: the draft gets
+        `menu_order_unreadable` (its order) and the project gets it too (the saved order), each with the
+        reason; the files are left as they are. When only the draft's order is unreadable and the saved
+        one is good, the draft shows the saved order and carries `menu_order_fallback` (the reason)."""
         path = self._dir(project_id)
         project = read_json(path / "project.json")
         draft = read_json(path / "draft.json", dict(changes={}, updated_at=None))
+        sortable = self._sortable(project)
+        saved_raw = project.get("menu_order")
+        draft_raw = draft_order_value(draft, project)
+        saved_order, saved_error = read_order(saved_raw, sortable)
+        draft_order, draft_error = read_order(draft_raw, sortable)
+        # Only the draft's order is unreadable and the saved one is fine (not a model that cannot sort): show the saved
+        # order instead of the factory one, so a save never throws away a good saved order. The page says so
+        # (`menu_order_fallback`); its next draft write carries the saved order and repairs the draft.
+        fallback = bool(draft_error) and not saved_error and sortable is not False
+        if fallback:
+            draft_order = saved_order
+        draft = dict(draft, menu_order=draft_order)
+        draft.pop("menu_order_unreadable", None)
+        draft.pop("menu_order_fallback", None)
+        if fallback:
+            draft["menu_order_fallback"] = draft_error
+        elif draft_error:
+            draft["menu_order_unreadable"] = draft_error
+        if saved_error:
+            project["menu_order_unreadable"] = saved_error
+        order_differs = (saved_raw != draft_raw) if (saved_error or draft_error) else (draft_order != saved_order)
+        # 柔光 / 65:24 (camera_features): the draft's when it has the key, else the saved ones.
+        saved_features = project.get("camera_features") or {}
+        draft["camera_features"] = draft["camera_features"] if "camera_features" in draft else dict(saved_features)
+        project["camera_features"] = dict(saved_features)
         project["draft"] = draft
-        project["unsaved"] = draft.get("changes", {}) != project.get("changes", {})
+        project["unsaved"] = draft.get("changes", {}) != project.get("changes", {}) or order_differs or \
+            draft["camera_features"] != saved_features
         project["target_body_label"] = body_target.label(project.get("target_body"))
         return project
+
+    @staticmethod
+    def _sortable(project):
+        """Whether the project's model can be sorted; None when it cannot be told from the project
+        (the routes that know the model check again)."""
+        try:
+            return menu_orders.model_editable(models.for_project(project))
+        except ValueError:
+            return None
 
     def rename_project(self, project_id, title):
         path = self._dir(project_id)
@@ -266,13 +375,36 @@ class Store:
         write_json(path / "project.json", project)
         return self.get_project(project_id)
 
-    def put_draft(self, project_id, changes, template):
+    def put_draft(self, project_id, changes, template, menu_order=KEEP, camera_features=KEEP):
+        """Write the draft. An explicit menu_order is checked and always written (null = factory order);
+        KEEP carries the draft's "menu_order" over exactly as stored, an unreadable one or a missing key
+        included, so a page that leaves the order alone never changes it and other edits still save."""
         path = self._dir(project_id)
         clean = self.validate_changes(project_id, changes, template, strict=False)
+        old = read_json(path / "draft.json", {})
+        draft = dict(changes=clean, updated_at=now())
+        if menu_order is not KEEP:
+            try:
+                draft["menu_order"] = clean_menu_order(menu_order, template)
+            except StoreError as exc:
+                hint = "" if str(exc) == menu_orders.UNSUPPORTED else "，请重新调整菜单顺序后再试"
+                raise StoreError("%s（菜单顺序没有存上，这次的其他改动也没有写入%s）" % (exc, hint)) from None
+        elif "menu_order" in old:
+            draft["menu_order"] = old["menu_order"]
+        if camera_features is not KEEP:
+            try:
+                draft["camera_features"] = camera_features_of(camera_features, template)
+            except camera_features_mod.FeatureError as exc:
+                raise StoreError("%s（这次的改动没有写入）" % exc) from None
+        elif "camera_features" in old:
+            draft["camera_features"] = old["camera_features"]
         # The same draft again (the page pushes it when it closes or reloads) leaves the file alone:
         # a 生成 running meanwhile checks the project did not change and would otherwise give up.
-        if read_json(path / "draft.json", {}).get("changes") != clean:
-            write_json(path / "draft.json", dict(changes=clean, updated_at=now()))
+        same = old.get("changes") == clean and ("menu_order" in old) == ("menu_order" in draft) and \
+            old.get("menu_order") == draft.get("menu_order") and \
+            ("camera_features" in old) == ("camera_features" in draft) and old.get("camera_features") == draft.get("camera_features")
+        if not same:
+            write_json(path / "draft.json", draft)
         return self.get_project(project_id)
 
     def save(self, project_id, template):
@@ -280,14 +412,32 @@ class Store:
         project = read_json(path / "project.json")
         draft = read_json(path / "draft.json", dict(changes={}))
         clean = self.validate_changes(project_id, draft.get("changes", {}), template, strict=True)
+        try:
+            order = clean_menu_order(draft_order_value(draft, project), template)
+        except StoreError as exc:
+            raise StoreError("已存的菜单顺序无法读取，这次没有保存（%s）：请在「菜单顺序」里重新排好或恢复原厂顺序，再保存" % exc) from None
+        try:
+            features = camera_features_of(draft["camera_features"] if "camera_features" in draft
+                                          else project.get("camera_features"), template)
+        except camera_features_mod.FeatureError as exc:
+            raise StoreError("%s，这次没有保存" % exc) from None
         stamp = now()
         number = len(project.get("versions", [])) + 1
         record = dict(changes=clean, saved_at=stamp)
+        if features:
+            record["camera_features"] = features
         if "menu_language" in project:  # a camera setting like target_body; noted with each saved version
             record["menu_language"] = project["menu_language"]
-        write_json(path / "versions" / ("%d.json" % number), record)
+        write_json(path / "versions" / ("%d.json" % number), _with_order(record, order))
+        project = _with_order(project, order)
+        project.pop("camera_features", None)
+        if features:
+            project["camera_features"] = features
         project.update(changes=clean, saved_at=stamp)
-        project.setdefault("versions", []).append(dict(number=number, saved_at=stamp, changes=len(clean)))
+        entry = dict(number=number, saved_at=stamp, changes=len(clean))
+        if order is not None:
+            entry["menu_order"] = True
+        project.setdefault("versions", []).append(entry)
         write_json(path / "project.json", project)
         return self.get_project(project_id)
 

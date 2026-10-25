@@ -16,10 +16,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from . import models, VERSION, base_curve, factory_envelope, film_fit, fitting_setup, film_luts, film_profiles, film_requests, fwread, fwzip, generate, names, photo_lut, pngcheck, shutdown_verify, template as tpl, xmp_lut
+from . import models, VERSION, base_curve, factory_envelope, film_fit, fitting_setup, film_luts, film_profiles, film_requests, fwread, fwzip, generate, menu_order, names, photo_lut, pngcheck, shutdown_verify, template as tpl, xmp_lut
 from .identify import identify
 from .paths import WEB_ROOT, data_root
-from .store import SHUTDOWN_BUDGET, Store, StoreError, read_json, write_json
+from .store import KEEP, SHUTDOWN_BUDGET, Store, StoreError, read_json, write_json
 
 MAX_BODY = 64 * 1024 * 1024
 
@@ -51,7 +51,11 @@ class App:
                     data_root=str(self.store.root),
                     shutdown=dict(budget=SHUTDOWN_BUDGET, width=720, height=480),
                     film_writer=film_requests.status(),
-                    families=[models.capabilities(m) for m in models.ALL])
+                    families=[models.capabilities(m) for m in models.ALL],
+                    menu_order=dict(schema=menu_order.SCHEMA, factory_still=list(menu_order.FACTORY_STILL),
+                                    factory_video=list(menu_order.FACTORY_VIDEO),
+                                    video_excluded=list(menu_order.VIDEO_EXCLUDED),
+                                    video_policy=menu_order.VIDEO_POLICY))
 
     def import_firmware(self, data, filename):
         if not data:
@@ -170,7 +174,7 @@ SAFETY_HEADERS = (
     ("Cache-Control", "no-store"),
 )
 PREF_KEYS = ("preflight_seen", "guide_off", "guide_start_seen", "guide_work_seen",
-             "guide_v1_news_seen", "guide_editor_seen")
+             "guide_v1_news_seen", "guide_v2_news_seen", "guide_tour_seen", "guide_editor_seen")
 # Seconds a single socket read or write may wait before the connection is dropped.
 IDLE_TIMEOUT = 30
 # A declared request body that the route never read (403, 404, 405, 413 ...) is
@@ -435,7 +439,15 @@ def api_delete_project(req, pid):
 
 
 def api_put_draft(req, pid):
-    return project_response(req, req.store.put_draft(pid, req.read_json().get("changes"), project_context(req, pid)[2]))
+    # No "menu_order" key keeps the draft's order exactly as stored (older pages send only the changes; this
+    # page leaves it out while a stored order cannot be read); null = factory order, written explicitly.
+    # A stored order that cannot be read no longer stops project_context(): {"menu_order": null} repairs it.
+    body = req.read_json()
+    order = body["menu_order"] if "menu_order" in body else KEEP
+    # 柔光 / 65:24 switches: absent = keep as stored (older pages), otherwise checked and written.
+    features = body["camera_features"] if "camera_features" in body else KEEP
+    return project_response(req, req.store.put_draft(pid, body.get("changes"), project_context(req, pid)[2],
+                                                     menu_order=order, camera_features=features))
 
 
 def api_save_project(req, pid):

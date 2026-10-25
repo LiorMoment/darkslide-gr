@@ -6,7 +6,7 @@ window.DarkslideGuide = (function () {
   const PAD = 6;
   const GAP = 16;
   const CARD_W = 360;
-  // A step without a target is a centred card (the 1.0 news card). next/skip label the two buttons;
+  // A step without a target is a centred card (the news card; badge is its corner mark). next/skip label the two buttons;
   // a step whose control is missing or hidden (narrow window, folded column) is skipped quietly.
   const FLOWS = {
     start: [
@@ -15,16 +15,23 @@ window.DarkslideGuide = (function () {
       { target: () => document.getElementById("drop"), title: "把官方固件拖到这里",
         text: "从理光官网下载对应系列的官方固件：GR III 是 fwdc239b.bin，GR IIIx 是 fwdc243b.bin。工具会核对是不是官方原件，文件只留在你的电脑上。" },
     ],
+    // 下一版 (user 2026-10-25: 菜单排序 and 柔光 ship, for GR III and GR IIIx; 画幅 comes later). The
+    // version number is not decided yet, so the corner says NEW until it is.
     news: [
-      { label: "1.0 新增", title: "这一版新加了这些",
-        lines: ["胶片：16 卷胶片，点一卷当起点", "自己调色：白平衡、影调、曲线、色彩，可导出 .cube",
-                "写进相机：选好的胶片和调色拟合后写进预设（近似）", "你自己的 LUT：导入后自动检查能不能写进相机", "新机型：GR IIIx 系列和 HDF（已适配 · 未实测）",
-                "装进相机：生成后一步步教你刷"],
+      { label: "这一版新增", badge: "NEW", title: "这一版新加了这些",
+        lines: ["菜单排序：在左栏按住预设上下拖，就是相机里影像控制菜单的顺序", "柔光：整台相机的开关，在相机里切关、弱、中、强，所有预设共用",
+                "柔光页里有「菜单」和「ADJ 快捷键」两种用法的图示", "GR III 和 GR IIIx 都能用"],
         next: "带我看看", skip: "以后再说" },
+    ],
+    tour: [
+      { target: () => document.getElementById("slots"), title: "按住拖动，排相机菜单顺序",
+        text: "按住预设上下拖，就是相机影像控制菜单里的顺序。自定义 1、2 固定在最后；点「恢复原厂」可以还原。" },
+      { target: () => document.getElementById("featSoft"), title: "柔光",
+        text: "像柔光镜一样让亮处晕开。在相机里切关、弱、中、强，所有预设共用一个档位。", next: "知道了" },
     ],
     editor: [
       { target: () => document.getElementById("slots"), title: "先选一个预设",
-        text: "12 个内置预设都能改；标准只能换图标，自定义 1、2 不能改。" },
+        text: "12 个内置预设都能改，也能按住拖动排顺序；标准只能换图标，自定义 1、2 不能改。" },
       { target: () => document.getElementById("iconField"), title: "点图标就能换",
         text: "名字在下面改，只能用英文；右边的数字是还能写几个字。" },
       { target: () => document.getElementById("filmField"), title: "点一卷胶片当起点",
@@ -95,7 +102,7 @@ window.DarkslideGuide = (function () {
     if (el) el.scrollIntoView({ block: "center" });
     const total = FLOWS[flow].length, n = index + 1;
     card.querySelector(".guide-label").textContent = step.label || (total > 1 ? "指引 " + n + " / " + total : "指引");
-    card.querySelector(".guide-num").textContent = step.label ? "1.0" : String(n).padStart(2, "0");
+    card.querySelector(".guide-num").textContent = step.badge || String(n).padStart(2, "0");
     card.querySelector(".guide-title").textContent = step.title;
     const text = card.querySelector(".guide-text");
     if (step.lines) {

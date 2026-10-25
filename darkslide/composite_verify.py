@@ -8,7 +8,7 @@ Entropy/pixel decoding remains the caller's separate image validation step.
 """
 import hashlib
 import struct
-from . import fwread, models
+from . import fwread, menu_order_verify, models, soft_glow_verify
 
 IDENTIFIERS = ((358, 4), (548, 268), (354, 269), (357, 270), (350, 271),
                (352, 272), (232, 274), (346, 275), (356, 276), (351, 277),
@@ -108,6 +108,22 @@ def _longer_name_home(p, string, keep=VL.NEVER_LENT):
     return None
 
 
+def _menu_order_expected(before, after, menu_edits):
+    """Menu-order tables, re-derived by the independent menu_order_verify module.
+    Returns (offset, bytes) windows that the module has checked against the
+    request; the caller still owns overlap checks and the whole-payload compare."""
+    _need(len(menu_edits) <= 1, 'duplicate menu order request')
+    windows = []
+    for edit in menu_edits:
+        _need(set(edit) == {'kind', 'schema', 'still_slots', 'video_slots'}, 'menu order request')
+        request = {k: edit[k] for k in ('schema', 'still_slots', 'video_slots')}
+        checked = menu_order_verify.verify_tables(before, after, request)
+        _need(checked['scope'] == 'menu_tables_only' and checked['tables'] == 7, 'menu order scope')
+        for start, end in checked['verified_spans']:
+            windows.append((start, after[start:end]))
+    return windows
+
+
 def verify(official, result, edits, template, jpeg=None, *, film_profiles=None,
            film_layout='legacy_arena_v1'):
     """Return checks; failures are closed and do not authorize a download.
@@ -125,11 +141,19 @@ disk here, and passing checks does not change the generation availability gate.
         model = models.for_template(template)
         _need(type(film_layout) is str and
               film_layout in ('legacy_arena_v1', 'four_curve_v1', 'inplace_history_cache_exit_v29'), 'film layout')
-        _need(type(edits) is list and len(edits) <= 28 and (edits or jpeg is not None), 'request')
+        _need(type(edits) is list and len(edits) <= 30 and (edits or jpeg is not None), 'request')
         _need(all(type(edit) is dict for edit in edits), 'edit object')
         film_edits = [edit for edit in edits if edit.get('kind') == 'film']
-        other_edits = [edit for edit in edits if edit.get('kind') != 'film']
+        menu_edits = [edit for edit in edits if edit.get('kind') == 'menu_order']
+        glow_edits = [edit for edit in edits if edit.get('kind') == 'soft_glow']
+        other_edits = [edit for edit in edits if edit.get('kind') not in ('film', 'menu_order', 'soft_glow')]
+        _need(len(edits) - len(menu_edits) - len(glow_edits) <= 28, 'request')
+        _need(len(glow_edits) <= 1 and all(e == {'kind': 'soft_glow', 'version': 'v22.6'} for e in glow_edits),
+              'soft glow request')
+        _need(model in (models.GR3, models.GR3X) or not glow_edits, 'soft glow: GR III 2.10 / GR IIIx 1.60 packages only')
         _need(model == models.GR3 or not film_edits, 'IIIx ordinary verifier does not accept film edits')
+        # GR IIIx 1.60 holds the seven tables at the GR III 2.10 offsets; menu_order_verify pins both payloads.
+        _need(model in (models.GR3, models.GR3X) or not menu_edits, 'menu order: GR III 2.10 / GR IIIx 1.60 packages only')
         _need(len(other_edits) <= 24, 'too many regular edits')
         if film_layout == 'inplace_history_cache_exit_v29':
             from . import film_inplace_complete as film_backend
@@ -266,6 +290,16 @@ disk here, and passing checks does not change the generation availability gate.
             add('film_layout', True, film_layout)
             for window in readback.expected_windows:
                 write(window.offset, window.data)
+        if menu_edits:
+            for at, data in _menu_order_expected(before, after, menu_edits):
+                write(at, data)
+            add('menu_order_tables', True)
+        if glow_edits:
+            checked = soft_glow_verify.verify(bytes(before), bytes(after))
+            _need(checked['scope'] == 'soft_glow_windows_only', 'soft glow scope')
+            for at, data in checked['spans']:
+                write(at, data)
+            add('soft_glow_windows', True, '%d windows' % checked['windows'])
         row, start = p.off(0x53B3488C) + 6 * 8, p.off(0x53B3500C)
         add('grain_menu_expected', after[row:row+8] == expected[row:row+8] and
             after[start:start+28] == expected[start:start+28])
