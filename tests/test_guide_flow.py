@@ -28,8 +28,9 @@ const scenarios = {
   never: `state.status.prefs = {}; answers.news = [true, "skip"]; maybeWorkGuide();`,
   tour_closed: `state.status.prefs = {}; answers.tour = [false, "close"]; maybeWorkGuide();`,
   off: `state.status.prefs = { guide_off: true }; maybeWorkGuide();`,
-  seen_all: `state.status.prefs = { guide_v2_news_seen: true, guide_editor_seen: true }; maybeWorkGuide();`,
-  replay: `state.status.prefs = { guide_v2_news_seen: true, guide_editor_seen: true }; startTour(startEditorGuide);`,
+  seen_all: `state.status.prefs = { guide_v3_news_seen: true, guide_editor_seen: true }; maybeWorkGuide();`,
+  old_v2_user: `state.status.prefs = { guide_v1_news_seen: true, guide_v2_news_seen: true, guide_editor_seen: true }; maybeWorkGuide();`,
+  replay: `state.status.prefs = { guide_v3_news_seen: true, guide_editor_seen: true }; startTour(startEditorGuide);`,
 };
 (async () => {
   vm.runInContext(scenarios[scenario], ctx);
@@ -49,6 +50,7 @@ class GuideFlow(unittest.TestCase):
     def test_new_user_gets_news_tour_then_editing_guide(self):
         got = self.run_case("fresh")
         self.assertEqual(got["flows"], ["news", "tour", "editor"])
+        self.assertIn(["guide_v3_news_seen", True], got["prefs"])
         self.assertIn(["guide_v2_news_seen", True], got["prefs"])
         self.assertIn(["guide_v1_news_seen", True], got["prefs"])
         self.assertIn(["guide_tour_seen", True], got["prefs"])
@@ -56,6 +58,9 @@ class GuideFlow(unittest.TestCase):
 
     def test_old_user_gets_news_and_tour_only(self):
         self.assertEqual(self.run_case("old_user")["flows"], ["news", "tour"])
+
+    def test_whoever_saw_the_1_5_card_gets_the_1_6_one(self):
+        self.assertEqual(self.run_case("old_v2_user")["flows"], ["news", "tour"])
 
     def test_later_closes_everything_for_now(self):
         got = self.run_case("later")
@@ -81,7 +86,7 @@ class GuideFlow(unittest.TestCase):
 
 class Keys(unittest.TestCase):
     def test_server_accepts_new_guide_keys(self):
-        for k in ("guide_v2_news_seen", "guide_tour_seen"):
+        for k in ("guide_v2_news_seen", "guide_v3_news_seen", "guide_tour_seen"):
             self.assertIn(k, server.PREF_KEYS)
 
 

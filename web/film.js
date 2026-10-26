@@ -509,9 +509,16 @@
     const current = edit.film || null;
     const pick = (id) => () => hooks.setFilm(slot.no, id || undefined);
     const tiles = [];
+    // A preset that cannot take a film still shows the strip, grey and not clickable (user, 2026-10-26),
+    // so it is clear the feature exists and where it is.
+    if (film.catalog && !allowed) {
+      tiles.push(tile("不用", true, () => {}, "", null));
+      for (const f of film.catalog.films) tiles.push(tile(f.name, false, () => {}, "", f.id, "", iconUrl(f.id) || { card: plateLines(f)[1] }));
+      tiles.forEach((b) => { b.disabled = true; b.tabIndex = -1; });
+    }
     if (open) {
       tiles.push(tile("不用", !current, pick(null), "不用胶片：从这个预设原来的颜色开始调", null));
-      for (const f of film.catalog.films) tiles.push(tile(f.name, current === f.id, pick(f.id), f.film + " · " + f.print + (builtinOutside(f.id) ? "\n超出理光相机原厂的范围：只能预览和导出，不能写进相机" : ""), f.id, builtinOutside(f.id) ? "超范围" : "", iconUrl(f.id) || plateLines(f)));
+      for (const f of film.catalog.films) tiles.push(tile(f.name, current === f.id, pick(f.id), f.film + " · " + f.print + (builtinOutside(f.id) ? "\n超出理光相机原厂的范围：只能预览和导出，不能写进相机" : ""), f.id, builtinOutside(f.id) ? "超范围" : "", iconUrl(f.id) || { card: plateLines(f)[1] }));
       for (const r of film.recipes) tiles.push(tile(nameOf(r.id), current === r.id, pick(r.id), "照片中保存的曲线和矩阵", r.id, "已恢复"));
       for (const l of film.luts.filter((x) => !x.bake)) tiles.push(removable(l, tile(l.name, current === l.id, pick(l.id), lutOutside(l) ? "我的 LUT · 超出理光相机原厂的范围，不能写进相机" : l.fitted ? "我的 LUT · 已拟合成相机参数" : film.fitReady !== false ? "我的 LUT · 选中后自动检查能不能写进相机" : "我的 LUT · 还没拟合：点「拟合」或「生成」时会检查能不能写进相机", l.id, lutOutside(l) ? "超范围" : l.fitted ? "" : "待检查")));
       const add = document.createElement("button");
@@ -584,6 +591,20 @@
     b.setAttribute("aria-pressed", on ? "true" : "false");
     b.setAttribute("aria-label", text);
     if (title) b.title = title;
+    // A built-in film without the user's own icon is a small card: name, speed, and a five-step ramp of
+    // a five-step strip in the film's colour (boards 25f/25i).
+    if (plate && plate.card !== undefined) {
+      b.classList.add("card");
+      const name = document.createElement("span"), iso = document.createElement("span"), ramp = document.createElement("span");
+      name.className = "film-card-name"; name.textContent = text;
+      iso.className = "film-card-iso mono"; iso.textContent = plate.card && !text.includes(plate.card) ? plate.card : "";  // 「5207」 gets 250D; 「Portra 400」 already says 400
+      ramp.className = "film-card-ramp";
+      ramp.style.background = rampOf(id);
+      b.append(name, iso, ramp);
+      if (tag) { const t = document.createElement("span"); t.className = "film-tag" + (tag === "超范围" ? " out" : /待/.test(tag) ? " wait" : ""); t.textContent = tag; b.append(t); }
+      b.addEventListener("click", onclick);
+      return b;
+    }
     // plate: the user's own icon (a URL) or the lines of a drawn name plate
     const thumb = typeof plate === "string" ? plate : plate ? plateUrl(plate) : id ? gradedUrl(id, true) : null;
     if (thumb) b.style.backgroundImage = 'url("' + thumb + '")';
@@ -594,6 +615,19 @@
     if (tag) { const t = document.createElement("span"); t.className = "film-tag" + (tag === "超范围" ? " out" : /待/.test(tag) ? " wait" : ""); t.textContent = tag; b.append(t); }
     b.addEventListener("click", onclick);
     return b;
+  }
+
+  // The card's five-step strip: one colour per film, dark to light (the design's palette, boards 25f/25i,
+  // user 2026-10-26: these read better than colours computed from the LUT). A hint of the film's look,
+  // not a measurement.
+  const FILM_TINT = { portra400: "#C9A27A", portra160: "#C7AE90", portra800: "#B98E6A", portra800push1: "#B3845E", portra800push2: "#AD7A52",
+    gold200: "#D9A24A", ultramax400: "#C98B4A", ektar100: "#C9563A", pro400h: "#8FB0A6", c200: "#7FA07A", xtra400_portraendura: "#6E9A7A",
+    verita200d: "#B89A7A", 5203: "#9AA6B0", 5207: "#8E9AA4", 5213: "#6E7FA0", 5219: "#5A6A94" };
+  const mixHex = (a, b, k) => "#" + [1, 3, 5].map((n) => Math.round(parseInt(a.substr(n, 2), 16) * (1 - k) + parseInt(b.substr(n, 2), 16) * k).toString(16).padStart(2, "0")).join("");
+  function rampOf(id) {
+    const c = FILM_TINT[id] || "#9A9A96";
+    const steps = [mixHex(c, "#1A1A18", 0.65), mixHex(c, "#1A1A18", 0.32), c, mixHex(c, "#F4F1EA", 0.45), mixHex(c, "#F4F1EA", 0.8)];
+    return "linear-gradient(90deg," + steps.map((x, i) => x + " " + i * 20 + "% " + (i + 1) * 20 + "%").join(",") + ")";
   }
 
   // Own LUTs get a small × (top left; the 待拟合/超范围 tag sits top right). Built-in films have none.
@@ -707,12 +741,12 @@
     const { level, note, canFit, canPull } = fitState(slot, edit);
     // Distinct colours (user, 2026-10-17): out of range is red, waiting (to fit / being checked) is amber,
     // a low approximation is orange, so the states are not confused.
-    const tone = { "超出范围": "var(--st-out)", "待拟合": "var(--st-wait)", "检查中": "var(--st-wait)", "低": "var(--st-low)", "预览不可用": "var(--st-low)", "高": "#EDEDEA" }[level] || "";
+    const tone = { "超出范围": "var(--st-out)", "待拟合": "var(--st-wait)", "检查中": "var(--st-wait)", "低": "var(--st-low)", "预览不可用": "var(--st-low)", "高": "var(--text)" }[level] || "";
     $("fitBadge").textContent = level === "待拟合" || level === "检查中" || level === "超出范围" || level === "已恢复" || level === "预览不可用" ? level : "近似程度 " + level;
-    $("fitBadge").style.background = tone;
-    $("fitBadge").style.color = level === "超出范围" ? "#fff" : "";
+    $("fitBadge").style.background = level === "高" ? "var(--ok-bg)" : tone;  // 高: the design's green pill
+    $("fitBadge").style.color = level === "超出范围" ? "#fff" : level === "高" ? "var(--ok-ink)" : tone ? "var(--bg)" : "";  // dark text on the amber/orange pills was unreadable
     $("fitBar").style.width = (LEVEL_PCT[level] || (level === "待拟合" || level === "检查中" ? 12 : 0)) + "%";
-    $("fitBar").style.background = tone === "#EDEDEA" ? "" : tone;
+    $("fitBar").style.background = tone === "var(--text)" ? "" : tone;
     $("fitNote").textContent = film.fitting ? film.fittingNote || "正在拟合……" : note;
     $("fitNote").title = $("fitNote").textContent;
     $("btnFit").textContent = isRecipe(id) && !adj ? "核对预览" : "拟合";

@@ -174,7 +174,7 @@ SAFETY_HEADERS = (
     ("Cache-Control", "no-store"),
 )
 PREF_KEYS = ("preflight_seen", "guide_off", "guide_start_seen", "guide_work_seen",
-             "guide_v1_news_seen", "guide_v2_news_seen", "guide_tour_seen", "guide_editor_seen")
+             "guide_v1_news_seen", "guide_v2_news_seen", "guide_v3_news_seen", "guide_tour_seen", "guide_editor_seen")
 # Seconds a single socket read or write may wait before the connection is dropped.
 IDLE_TIMEOUT = 30
 # A declared request body that the route never read (403, 404, 405, 413 ...) is

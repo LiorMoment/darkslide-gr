@@ -259,17 +259,19 @@
     svg.setAttribute("class", "adj-svg");
     svg.setAttribute("aria-label", "曲线：点空白处加点，拖动调整，双击删除");
     const pts = curvePts(g, ui.ch), f = spline(pts);
-    const color = { all: "#EDEDEA", r: "#F08A6C", g: "#8FC48A", b: "#7FA7E0" }[ui.ch];
+    const color = { all: "var(--text)", r: "#F08A6C", g: "#8FC48A", b: "#7FA7E0" }[ui.ch];
     let d = "";
     for (let i = 0; i <= 50; i++) { const x = i / 50; d += (i ? "L" : "M") + (x * 100).toFixed(1) + " " + ((1 - Math.min(1, Math.max(0, f(x)))) * 100).toFixed(1); }
-    svg.innerHTML = '<path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" stroke="#2C2C2A" stroke-width="0.6" fill="none" vector-effect="non-scaling-stroke"/>' +
-      '<path d="M0 100 L100 0" stroke="#3A3936" stroke-width="0.6" fill="none" vector-effect="non-scaling-stroke"/>';
+    svg.innerHTML = '<path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" style="stroke:var(--curve-grid)" stroke-width="0.6" fill="none" vector-effect="non-scaling-stroke"/>' +
+      '<path d="M0 100 L100 0" style="stroke:var(--curve-grid)" stroke-width="0.6" fill="none" vector-effect="non-scaling-stroke"/>';
     const path = document.createElementNS(NS, "path");
-    Object.entries({ d, stroke: color, "stroke-width": "1.6", fill: "none", "vector-effect": "non-scaling-stroke" }).forEach(([k, v]) => path.setAttribute(k, v));
+    Object.entries({ d, "stroke-width": "2", fill: "none", "vector-effect": "non-scaling-stroke" }).forEach(([k, v]) => path.setAttribute(k, v));
+    path.style.stroke = color;  // style, not the attribute: the colour can be a theme variable
     svg.append(path);
     pts.forEach((p, i) => {
       const c = document.createElementNS(NS, "circle");
-      Object.entries({ cx: p[0] * 100, cy: (1 - p[1]) * 100, r: 2.4, fill: "#EDEDEA" }).forEach(([k, v]) => c.setAttribute(k, v));
+      Object.entries({ cx: p[0] * 100, cy: (1 - p[1]) * 100, r: 2.4 }).forEach(([k, v]) => c.setAttribute(k, v));
+      c.style.fill = "var(--text)";
       c.dataset.i = i;
       svg.append(c);
     });

@@ -6,6 +6,7 @@
 <title>DARKSLIDE GR</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="app.css">
+<script src="theme.js"></script>
 </head>
 <body>
 <header class="top">
@@ -15,6 +16,11 @@
     <span class="cam-mini" aria-hidden="true"><span></span></span>
     <span class="chip-text"><span id="chipModel">GR III</span><select id="projectBody" class="chip-select" aria-label="相机型号" title="这个工程对应哪一款相机：影响 HDF 机身保护、原厂关机图和未实测提示" hidden></select><span class="dim" id="chipFw">固件 2.10 · 官方原件 · 已核对</span></span>
     <button type="button" class="link-btn dim small" id="chipChange" title="回到首页，换一个固件或相机">更换</button>
+  </div>
+  <div id="themeSeg" class="theme-seg" role="radiogroup" aria-label="界面颜色">
+    <button type="button" role="radio" data-theme="system" aria-label="跟随系统" title="跟随系统"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16v11H4zM9 20h6M12 16v4"/></svg></button>
+    <button type="button" role="radio" data-theme="dark" aria-label="深色" title="深色"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
+    <button type="button" role="radio" data-theme="light" aria-label="淡色" title="淡色"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg></button>
   </div>
   <button id="btnSettings" class="icon-btn" aria-label="设置" title="设置">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
@@ -63,11 +69,11 @@
     </nav>
 
     <nav class="plist" id="plist" aria-label="预设">
-      <div class="plist-head mono">影像控制 · <span id="slotCount">14</span></div>
+      <div class="plist-head">影像控制 <span class="mono plist-count" id="slotCount">14</span></div>
       <div class="order-bar" id="orderBar"><span class="order-state" id="orderState">菜单顺序 · 原厂</span><button type="button" class="btn xs ghost order-reset" id="orderReset" disabled>恢复原厂</button></div>
       <span class="xsmall dim2 order-unsupported" id="orderUnsupported" hidden></span>
       <div id="slots" role="listbox" aria-label="预设"></div>
-      <p class="xsmall dim2 order-hint" id="orderHint" title="视频模式的列表跟着这里的顺序（视频本来就没有柔和单色和 HDR 色调），RAW 显影里的列表也一起变；改过的预设名、图标和胶片都跟着预设一起移动。">拖动预设可调整相机菜单顺序（手机上按住 ⠿ 拖）；视频和 RAW 显影的列表跟着变。在普通 GR III 上已实测，GR IIIx 和 HDF 机身<b>未实测</b>。</p>
+      <details class="xsmall dim2 order-hint order-more" id="orderHint"><summary><span>拖动可排序</span> <span aria-hidden="true">ⓘ</span></summary><p title="视频模式的列表跟着这里的顺序（视频本来就没有柔和单色和 HDR 色调），RAW 显影里的列表也一起变；改过的预设名、图标和胶片都跟着预设一起移动。">拖动预设可调整相机菜单顺序（手机上按住 ⠿ 拖）；视频和 RAW 显影的列表跟着变。在普通 GR III 上已实测，GR IIIx 和 HDF 机身<b>未实测</b>。</p></details>
       <p class="xsmall order-hint order-problem" id="orderProblem" role="status" hidden></p>
       <p class="xsmall dim2 order-hint" id="orderBodyNote" hidden></p>
       <div class="sr-only" id="orderLive" aria-live="polite"></div>
@@ -83,19 +89,19 @@
           <span class="mono v1-meta" id="slotMeta"></span>
           <div class="v1-photos" id="sceneBtns" role="group" aria-label="样片"></div>
           <input type="file" id="sceneInput" accept="image/png,image/jpeg,image/webp" hidden>
-          <span class="v1-badge" id="sampleBadge">样片仅示意</span>
+          <span class="grow"></span>
+          <div class="v1-seg" role="radiogroup" aria-label="对比方式" id="viewBtns">
+            <button role="radio" aria-checked="true" class="on" data-view="split">左右对比</button>
+            <button role="radio" aria-checked="false" data-view="after">只看调后</button>
+            <button role="radio" aria-checked="false" data-view="camera">相机近似</button>
+          </div>
           <button class="v1-help" id="btnEditorGuide" type="button" title="重看这一页的指引" aria-label="重看这一页的指引">?</button>
         </section>
 
         <section class="v1-preview" aria-label="预览">
           <div class="v1-preview-head">
-            <div class="v1-seg" role="radiogroup" aria-label="对比方式" id="viewBtns">
-              <button role="radio" aria-checked="true" class="on" data-view="split">左右对比</button>
-              <button role="radio" aria-checked="false" data-view="after">只看调后</button>
-              <button role="radio" aria-checked="false" data-view="camera">相机近似</button>
-            </div>
+
             <span class="v1-note" id="viewNote">左边原图，右边调后</span>
-            <span class="v1-note v1-local">照片只在本机处理</span>
           </div>
           <div class="v1-stage">
             <div class="v1-frame" id="sampleFrame" role="button" tabindex="0" aria-label="放大对比">
@@ -104,6 +110,8 @@
               <span class="v1-divider" id="sampleDivider"></span>
               <span class="v1-tag l" id="sampleBeforeTag">原图</span>
               <span class="v1-tag r" id="sampleAfterTag">调后</span>
+              <span class="v1-tag local">照片只在本机处理</span>
+              <span class="v1-badge v1-tag note" id="sampleBadge">样片仅示意</span>
               <button type="button" class="v1-empty" id="sampleEmpty"><b>＋ 选一张你拍的照片</b><span>用它来看胶片和调整的效果；照片只在这台电脑上处理，不上传</span></button>
             </div>
           </div>
@@ -111,7 +119,7 @@
 
         <section class="v1-presets" aria-label="预设">
           <div class="v1-card" id="iconField">
-            <div class="v1-card-head"><span>图标与预设名</span><span class="v1-pill solid" id="lookBadge">可改</span></div>
+            <div class="v1-card-head"><span>图标与预设名 <span class="dim2 icon-tip-mark" title="可以上传你自己的图片；小红书、抖音 @LiorMoment 也会分享一些图片素材。">ⓘ</span></span><span class="v1-pill solid" id="lookBadge">可改</span></div>
             <div class="v1-look">
               <button class="v1-icon" id="iconNew" title="点图标更换" aria-label="更换图标"><span>未修改</span></button>
               <div class="v1-look-text"><span class="small">点图标更换</span><button class="link-btn xsmall" id="btnFactoryStyle" title="输入几个字母，生成和原厂风格一致的文字图标">或做一个文字图标</button><span class="xsmall dim2" id="iconHint" hidden></span></div>
@@ -142,8 +150,8 @@
         </section>
 
         <section class="v1-films" aria-label="胶片 LUT" id="filmField">
-          <div class="v1-films-head"><span class="v1-films-title">胶片 LUT</span><button type="button" class="v1-info" id="filmCreditInfo" aria-label="数据来源与许可" hidden>ⓘ</button><span class="v1-note" id="filmHint">点一种当起点，再用右边滑块微调 · 「＋ 添加」导入 LUT 或 Lightroom 预设 · 近似效果，与厂商无关</span><span class="v1-pill" id="filmBadge">写入等实机测试</span></div>
-          <div class="v1-film-row" id="filmChips" role="group" aria-label="胶片 LUT"></div>
+          <div class="v1-films-line"><span class="v1-films-title">胶片</span><button type="button" class="v1-info" id="filmCreditInfo" aria-label="数据来源与许可" hidden>ⓘ</button><div class="v1-film-row" id="filmChips" role="group" aria-label="胶片 LUT"></div><span class="v1-fit-badge" id="fitBadge">近似程度 —</span></div>
+          <div class="v1-films-head"><span class="v1-note" id="filmHint">点一种当起点，再用右边滑块微调 · 「＋ 添加」导入 LUT 或 Lightroom 预设 · 近似效果，与厂商无关</span><span class="v1-pill" id="filmBadge">写入等实机测试</span></div>
           <label id="filmRecipeImport" class="btn ghost small-btn" hidden>从 DNG / JPEG 读取胶片配方<input id="filmRecipeInput" type="file" accept=".dng,.jpg,.jpeg" hidden></label>
           <input type="file" id="filmLutInput" accept=".cube" hidden>
           <input type="file" id="filmXmpInput" accept=".xmp" hidden>
@@ -155,7 +163,7 @@
 
         <section class="v1-out" aria-label="输出">
           <div class="v1-fit">
-            <div class="v1-fit-head"><span>颜色装进相机的近似程度</span><span class="v1-fit-badge" id="fitBadge">近似程度 —</span><button type="button" class="v1-fit-btn" id="btnFit" hidden title="把选的胶片 LUT 和右边的调整换算成相机参数（几秒钟）；换算后才能写进相机">拟合</button><button type="button" class="v1-fit-btn" id="btnPull" hidden title="找一个改动最小、能写进相机的版本，和原来的并排给你看；选不选由你，原来的保留不动">收进相机范围</button></div>
+            <div class="v1-fit-head"><span>颜色装进相机的近似程度</span><button type="button" class="v1-fit-btn" id="btnFit" hidden title="把选的胶片 LUT 和右边的调整换算成相机参数（几秒钟）；换算后才能写进相机">拟合</button><button type="button" class="v1-fit-btn" id="btnPull" hidden title="找一个改动最小、能写进相机的版本，和原来的并排给你看；选不选由你，原来的保留不动">收进相机范围</button></div>
             <div class="v1-fit-track"><span id="fitBar"></span></div>
             <span class="v1-note" id="fitNote"></span>
           </div>
@@ -444,7 +452,7 @@
             <option value="th" lang="th" translate="no">ภาษาไทย</option>
         </select>
         <div class="small menu-lang-auto" id="menuLangAuto" hidden>已按电脑语言预选，请确认和相机的菜单语言一致。</div>
-        <div class="dim2 xsmall" id="menuLangNote">固件里的 21 种语言都可选。改过的预设名会显示在这个语言的菜单里（英文菜单也会显示），其他语言保持原厂；名字比原厂英文名长时，另有一种不常用的语言也会显示。</div>
+        <div class="dim2 xsmall" id="menuLangNote" title="固件里的 21 种语言都可选。改过的预设名会显示在这个语言的菜单里（英文菜单也会显示），其他语言保持原厂；名字比原厂英文名长时，另有一种不常用的语言也会显示。">固件里的 21 种语言都可选。改过的预设名会显示在这个语言的菜单里（英文菜单也会显示），其他语言保持原厂；名字比原厂英文名长时，另有一种不常用的语言也会显示。</div>
       </div>
       <div class="row nowrap">
         <button class="btn grow1" id="btnSave">保存 ⌘S</button>

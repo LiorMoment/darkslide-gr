@@ -33,7 +33,7 @@ vm.runInContext(`
     selected:$('slots').children.filter(b=>b.getAttribute('aria-selected')==='true').map(b=>identityOf(b)),
     focus:document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute('data-slot'),
     names:$('slots').children.map(b=>nameOf(b).textContent),
-    icon:$('slots').children.find(b=>identityOf(b)===12).children.find(c=>c.className==='abbr').children[0].getAttribute('src'),
+    icon:$('slots').children.find(b=>identityOf(b)===12).children.find(c=>String(c.className).split(' ')[0]==='tile').children[0].getAttribute('src'),
     template:state.template.slots.map(s=>s.no),changes:state.changes,payload:('menu_order' in draftBody())?draftBody().menu_order:'absent'
   });
 `,ctx);

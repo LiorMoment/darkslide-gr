@@ -34,6 +34,10 @@ CHECK_TITLES = {
     "film_code_fields_and_targets": "胶片跳转、选择和后矩阵指令独立核对",
     "film_unselected_and_original_protected": "未选胶片槽位和受保护原厂数据保持不变",
     "body_protected_windows": "所选机身的 HDF 保护窗原字保持（有界核对，不代表兼容）",
+    "film_inplace_data_verified": "胶片数据（记录、矩阵、曲线）按所选胶片独立读回一致",
+    "film_inplace_shared_bytes_match_reference": "四卷共用的固定字节与核对过的参考版本逐字节相同",
+    "film_inplace_complete_window_coverage_verified": "改动范围与声明的胶片窗口完全吻合，没有多改也没有漏改",
+    "film_layout": "胶片写入方式：原位替换，不扩容",
     "film_closed_failure": "胶片独立读回出错",
     "closed_failure": "核对过程出错",
 }

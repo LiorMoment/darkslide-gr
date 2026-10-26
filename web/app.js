@@ -453,16 +453,16 @@ function maybeGuide(flow) {
   }));
 }
 
-// Workbench (F35, 下一版): the "这一版新增" card once, then a 2-step tour of 菜单排序 / 柔光, then (for
+// Workbench (F35; 1.6.0): the "这一版新增" card once, then a 2-step tour of 界面颜色 / 预设列表, then (for
 // someone who never had it) the 5-step preset-editing guide. 以后再说 closes them all for good; the "?" on the
 // editing page or Settings replays the tour and the editing guide. Whoever saw the 1.0 card still gets this one.
 function maybeWorkGuide() {
   const prefs = (state.status && state.status.prefs) || {};
   if (prefs.guide_off || window.DarkslideGuide.active()) return;
-  if (!prefs.guide_v2_news_seen) {
+  if (!prefs.guide_v3_news_seen) {  // 1.6.0: the new look; whoever saw the 1.5.0 card (v2) gets this one once
     requestAnimationFrame(() => !window.DarkslideGuide.active() && window.DarkslideGuide.start("news", async (forever, how) => {
-      if (forever) { await setPrefs([["guide_v2_news_seen", true], ["guide_v1_news_seen", true], ["guide_off", true]]); return; }
-      await setPrefs([["guide_v2_news_seen", true], ["guide_v1_news_seen", true]]);
+      if (forever) { await setPrefs([["guide_v3_news_seen", true], ["guide_v2_news_seen", true], ["guide_v1_news_seen", true], ["guide_off", true]]); return; }
+      await setPrefs([["guide_v3_news_seen", true], ["guide_v2_news_seen", true], ["guide_v1_news_seen", true]]);
       if (how === "next") startTour(() => { if (!prefs.guide_editor_seen) startEditorGuide(); });
       else if (!prefs.guide_editor_seen) await setPref("guide_editor_seen", true);
     }));
@@ -545,7 +545,10 @@ function setFilm(no, id) {
     if (id === undefined) delete slot.film; else slot.film = id;
     delete slot.grade;
   });
-  syncFilmIcon(no, id);
+  // The film icon is put on the preset in the background (about a second). 生成 waits for it: a change
+  // landing mid-build made the server refuse it as 「生成期间工程…改变」 (found in testing, 2026-10-26).
+  const sync = syncFilmIcon(no, id), pend = state.iconSyncs || (state.iconSyncs = new Set());
+  if (sync && sync.finally) { pend.add(sync); sync.finally(() => pend.delete(sync)); }
   syncFilmName(no, id, prev);
 }
 
@@ -717,10 +720,51 @@ function renderBanner() {
   $("templateState").textContent = t.reviewed ? t.model + " " + t.firmware : "不可用";
 }
 
+// The preset column's icon (design boards 25k/25l, user 2026-10-26): a monospace abbreviation tile,
+// two lines for the three monochrome variants; the user's own icon, when set, replaces it.
+const TILE_TOP = { Soft: "Soft", Hard: "Hard", Hi: "Hi" };
+// On screen an icon shows its source picture, filling the rounded square (the corners are cut by the
+// frame's radius), not the 40×40 written to the camera (user, 2026-10-26). The camera file is unchanged.
+// The <img> starts with the 40×40 and swaps to the full picture once it is drawn; drawings are cached.
+const iconViews = new Map();
+function iconView(icon) {
+  if (!icon) return Promise.resolve(null);
+  const key = icon.style === "factory" ? "f:" + icon.text : icon.source && icon.crop ? icon.source + ":" + JSON.stringify(icon.crop) : "";
+  if (!key) return Promise.resolve(null);
+  if (!iconViews.has(key)) iconViews.set(key, (async () => {
+    if (icon.style === "factory") return iconHiRes(icon);
+    const im = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = assetUrl(icon.source); });
+    if (!im) return null;
+    const { sx, sy, sw, sh } = icon.crop, side = Math.min(sw, sh), S = 192;  // the square at the crop's centre
+    const c = document.createElement("canvas"), g = c.getContext("2d");
+    c.width = c.height = S;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(im, sx + (sw - side) / 2, sy + (sh - side) / 2, side, side, 0, 0, S, S);
+    return c.toDataURL("image/png");
+  })().catch(() => null));
+  return iconViews.get(key);
+}
+function iconImg(icon, attrs) {
+  const img = el("img", Object.assign({ src: assetUrl(icon.asset), alt: "" }, attrs || {}));
+  iconView(icon).then((url) => { if (url) { img.src = url; img.classList.add("full"); } });
+  return img;
+}
+
+function slotTile(slot) {
+  const edit = state.changes[slot.no];
+  const box = el("span", { class: "tile", "aria-hidden": "true" });
+  if (edit && edit.icon) { box.classList.add("img"); box.append(iconImg(edit.icon)); return box; }
+  const abbr = String(slot.abbr || ""), top = TILE_TOP[abbr];
+  const main = top ? "BW" : /^\d+$/.test(abbr) ? "C" + abbr : abbr;
+  if (top) box.append(el("span", { class: "tile-top", text: top }));
+  box.append(el("span", { class: "tile-main len" + Math.min(main.length, 5), text: main }));
+  return box;
+}
+
 function slotIcon(slot, cls) {
   const edit = state.changes[slot.no];
   const box = el("span", { class: cls, "aria-hidden": "true" });
-  if (edit && edit.icon) { box.classList.add("img"); box.append(el("img", { src: assetUrl(edit.icon.asset), alt: "" })); }
+  if (edit && edit.icon) { box.classList.add("img"); box.append(iconImg(edit.icon)); }
   else if (factoryUrl(slot.no)) { box.classList.add("img"); box.append(el("img", { src: factoryUrl(slot.no), alt: "" })); }
   else box.textContent = slot.abbr;
   return box;
@@ -752,9 +796,12 @@ function renderSlots() {
     const locked = !editable(s, "icon") && !editable(s, "rename");
     const edit = state.changes[s.no];
     const what = editable(s, "rename") ? "图标和预设名可改" : editable(s, "icon") ? "仅图标可改" : "暂不开放";
-    const tag = edit ? "已改" : locked ? "不可改" : editable(s, "rename") ? "可改" : "仅图标";
+    // Only exceptions are marked (user 2026-10-25: 「可改」 on every row was clutter): edited, icon only, locked.
+    const tag = locked ? null : edit ? null : editable(s, "rename") ? null : "仅图标";
+    const name = edit && edit.name !== undefined ? edit.name : s.name;
+    const film = window.DarkslideFilm.SLOTS.includes(s.no);
     return el("button", {
-      class: "slot open" + (s.no === state.sel ? " on" : "") + (state.enterSlots ? " enter" : ""),
+      class: "slot open" + (s.no === state.sel ? " on" : "") + (locked ? " is-locked" : "") + (s.no === 13 ? " custom-first" : "") + (state.enterSlots ? " enter" : ""),
       style: state.enterSlots ? "animation-delay:" + i * 20 + "ms" : null,
       "data-slot": s.no,
       role: "option", "aria-selected": s.no === state.sel ? "true" : "false",
@@ -762,10 +809,12 @@ function renderSlots() {
       onclick: () => { if (window.DarkslideOrder.swallowClick()) return; state.sel = s.no; renderAll(); },
     }, [
       window.DarkslideOrder.grip(s.no),
-      window.DarkslideFilm.SLOTS.includes(s.no) ? el("span", { class: "slot-lut mono", text: "LUT", "aria-hidden": "true" }) : null,
-      slotIcon(s, "abbr"),
-      el("span", { class: "slot-name", text: edit && edit.name !== undefined ? edit.name : s.name }),
+      slotTile(s),
+      el("span", { class: "slot-name", text: name }),
+      name !== s.name ? el("span", { class: "slot-sub", text: `原 ${s.name}` }) : null,
+      edit ? el("span", { class: "slot-dot", "aria-hidden": "true" }) : null,
       tag ? el("span", { class: "slot-tag", text: tag }) : null,
+      locked || film ? el("span", { class: "slot-mark " + (locked ? "lock" : "film"), "aria-hidden": "true" }) : null,  // drawn in app.css
     ]);
   }));
   if (focusedSlot !== null) {
@@ -779,7 +828,9 @@ function renderEditor() {
   const edit = state.changes[s.no] || {};
   window.DarkslideFilm.render(s, edit);
   window.DarkslideAdjust.render(s, edit.grade, "", window.DarkslideFilm.SLOTS.includes(s.no));
-  $("slotMeta").textContent = String(s.no).padStart(2, "0") + " · 原 " + s.name;
+  $("slotMeta").textContent = `原 ${s.name}`;  // no slot number: 「07」 read as the 7th row (user 2026-10-25)
+  $("slotMeta").dataset.same = edit.name === undefined ? "1" : "";  // longer languages drop it when it only repeats the title
+  $("slotTitle").title = edit.name !== undefined ? `原 ${s.name}` : "";
   $("slotTitle").textContent = edit.name !== undefined ? edit.name : s.name;
   if (factoryUrl(s.no)) $("iconFactory").replaceChildren(el("img", { src: factoryUrl(s.no), alt: s.name + " 原厂图标" }));
   else $("iconFactory").textContent = s.abbr;
@@ -787,7 +838,7 @@ function renderEditor() {
   if (edit.icon) {
     iconNew.className = "v1-icon has";
     const reveal = state.revealAsset === edit.icon.asset;
-    iconNew.replaceChildren(el("img", { class: reveal ? "reveal" : null, src: assetUrl(edit.icon.asset), alt: s.name + " 新图标" }));
+    iconNew.replaceChildren(iconImg(edit.icon, { class: reveal ? "reveal" : null, alt: s.name + " 新图标" }));
     if (reveal) state.revealAsset = null;
   } else {
     iconNew.className = "v1-icon";
@@ -851,7 +902,7 @@ function renderChanges() {
     if (!edit) continue;
     if (edit.icon) {
       rows.push(el("div", { class: "change", "data-key": s.no + "i" }, [
-        el("span", { class: "thumb" }, el("img", { src: assetUrl(edit.icon.asset), alt: "" })),
+        el("span", { class: "thumb" }, iconImg(edit.icon)),
         el("span", { class: "txt" }, [el("span", { text: s.name + " 图标" }), el("span", { text: edit.icon.style === "factory" ? "→ 原厂风格 · " + (edit.icon.text || "") : edit.icon.film ? "→ 胶片图标 · " + window.DarkslideFilm.nameOf(edit.icon.film) : "→ 自定义图片" })]),
         el("button", { "aria-label": "撤销 " + s.name + " 图标改动", text: "×", onclick: (e) => leaveThen(e, () => setEdit(s.no, "icon", undefined)) }),
       ]));
@@ -1244,6 +1295,7 @@ async function setMenuLanguage(code, auto = false) {
 }
 
 async function generate() {
+  if (state.iconSyncs && state.iconSyncs.size) await Promise.allSettled([...state.iconSyncs]);
   if (!state.project.menu_language) { toast("先选择相机使用的菜单语言", true); return; }
   const candidate = !!(state.project.capabilities && state.project.capabilities.candidate_generation);
   const recipeExtension = candidate && !!state.project.capabilities.candidate_recipe_extension && $("iiixRecipeExtension").checked;
@@ -1423,6 +1475,8 @@ function guideChecks(summary) {
   const out = [];
   const looks = [...new Set(summary.filter((x) => x.what === "图标" || x.what === "预设名").map((x) => x.preset))];
   if (looks.length) out.push(looks.join("、") + " 的图标和名字");
+  const films = [...new Set(summary.filter((x) => x.what === "胶片").map((x) => x.preset))];
+  if (films.length) out.push(films.join("、") + " 的胶片颜色，各拍一张看看");
   for (const x of summary.filter((x) => x.what === "颗粒项")) out.push(x.preset + "的颗粒档位");
   if (summary.some((x) => x.what === "关机图")) out.push("关一次机，看关机画面");
   if (summary.some((x) => x.what === "菜单顺序")) out.push("影像控制菜单的顺序（拍照、视频、RAW 显影都看），选中后风格和名字对得上");
@@ -1502,7 +1556,7 @@ function renderPresetCard() {
   const edit = state.changes[s.no] || {};
   const icon = $("pcardIcon");
   icon.className = "pcard-icon";
-  if (edit.icon) icon.replaceChildren(el("img", { src: assetUrl(edit.icon.asset), alt: "" }));
+  if (edit.icon) { icon.classList.add("img"); icon.replaceChildren(iconImg(edit.icon)); }
   else if (factoryUrl(s.no)) { icon.classList.add("img"); icon.replaceChildren(el("img", { src: factoryUrl(s.no), alt: "" })); }
   else icon.textContent = s.abbr;
   const grainStage = ((state.status.detail || {}).grain || {})[String(s.no)] || "closed";
@@ -1934,7 +1988,7 @@ function wire() {
   $("btnOpenRescue").addEventListener("click", () => { $("settingsDialog").close(); show("viewRescue"); window.scrollTo(0, 0); });
   $("btnEditorGuide").addEventListener("click", () => startTour(startEditorGuide));
   $("btnGuideReset").addEventListener("click", async () => {
-    for (const k of ["guide_off", "guide_start_seen", "guide_work_seen", "guide_v1_news_seen", "guide_v2_news_seen", "guide_tour_seen", "guide_editor_seen"]) await setPref(k, false);
+    for (const k of ["guide_off", "guide_start_seen", "guide_work_seen", "guide_v1_news_seen", "guide_v2_news_seen", "guide_v3_news_seen", "guide_tour_seen", "guide_editor_seen"]) await setPref(k, false);
     $("settingsDialog").close();
     toast("指引已重新打开");
     if (!$("viewWork").hidden && state.feature !== "ic") { state.feature = "ic"; renderAll(); }

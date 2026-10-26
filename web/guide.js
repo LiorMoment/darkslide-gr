@@ -18,22 +18,22 @@ window.DarkslideGuide = (function () {
     // 下一版 (user 2026-10-25: 菜单排序 and 柔光 ship, for GR III and GR IIIx; 画幅 comes later). The
     // version number is not decided yet, so the corner says NEW until it is.
     news: [
-      { label: "这一版新增", badge: "NEW", title: "这一版新加了这些",
-        lines: ["菜单排序：在左栏按住预设上下拖，就是相机里影像控制菜单的顺序", "柔光：整台相机的开关，在相机里切关、弱、中、强，所有预设共用",
-                "柔光页里有「菜单」和「ADJ 快捷键」两种用法的图示", "GR III 和 GR IIIx 都能用"],
+      { label: "这一版新增", badge: "NEW", title: "界面换了新样子",
+        lines: ["圆角卡片、新的字母图标，预设名不再被截断", "右上角可以切换：跟随系统 / 深色 / 淡色",
+                "胶片换成小方块；你自己的胶片图标直接显示原图", "拖动排序时，指针换成了小奶猫爪"],
         next: "带我看看", skip: "以后再说" },
     ],
     tour: [
+      { target: () => document.getElementById("themeSeg"), title: "深色还是淡色",
+        text: "跟随系统、深色、淡色三选一，这台电脑会记住。第一次打开是淡色。" },
       { target: () => document.getElementById("slots"), title: "按住拖动，排相机菜单顺序",
-        text: "按住预设上下拖，就是相机影像控制菜单里的顺序。自定义 1、2 固定在最后；点「恢复原厂」可以还原。" },
-      { target: () => document.getElementById("featSoft"), title: "柔光",
-        text: "像柔光镜一样让亮处晕开。在相机里切关、弱、中、强，所有预设共用一个档位。", next: "知道了" },
+        text: "按住预设上下拖，就是相机影像控制菜单里的顺序。鼠标移上去会出现 ⠿；自定义 1、2 固定在最后。", next: "知道了" },
     ],
     editor: [
       { target: () => document.getElementById("slots"), title: "先选一个预设",
         text: "12 个内置预设都能改，也能按住拖动排顺序；标准只能换图标，自定义 1、2 不能改。" },
       { target: () => document.getElementById("iconField"), title: "点图标就能换",
-        text: "名字在下面改，只能用英文；右边的数字是还能写几个字。" },
+        text: "名字在旁边改，只能用英文；右边的数字是还能写几个字。" },
       { target: () => document.getElementById("filmField"), title: "点一卷胶片当起点",
         text: "预览会马上变。「＋ 添加」可以导入自己的 LUT 或 Lightroom 预设。只有银流冲洗、怀旧、HDR 色调、交叉冲洗这 4 个预设能把胶片写进相机。" },
       { target: () => document.getElementById("adjustPanel"), title: "在胶片基础上微调",
