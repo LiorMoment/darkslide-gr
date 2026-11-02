@@ -16,8 +16,13 @@ def numeric_sha(profile):
         for row in profile[field] for v in row))).hexdigest()
 
 
+def _iiix(firmware):
+    """GR IIIx 1.70 data (built-in films relabelled, fits on 1.70 projects) or 1.60."""
+    return models.GR3X_170 if firmware == models.GR3X_170.firmware else models.GR3X
+
+
 def installed_profile(profile, limits):
-    original = film_profiles.validate_profile(profile, profile['id'], models.GR3X.id)
+    original = film_profiles.validate_profile(profile, profile['id'], _iiix(profile.get('firmware')).id)
     knots, errors = _numeric(original, limits)
     applied = copy.deepcopy(original)
     applied['curves_u14'] = [list(expand_knots(c)) for c in knots]
@@ -45,7 +50,7 @@ def preview(base, profile, limits):
 
 def installed_fit_report(data, contract, profile, original_report, limits):
     """Score reconstructed values; keep the uncompressed fit score as provenance."""
-    film_fit.contract_model(contract, models.GR3X.id)
+    film_fit.contract_model(contract, _iiix(contract.get('firmware')).id)
     applied, info = installed_profile(profile, limits)
     _, size, rows = film_luts.parse_cube(data)
     fit = film_fit.fitlib

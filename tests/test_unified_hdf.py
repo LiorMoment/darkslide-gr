@@ -125,6 +125,8 @@ from test_http import Served
 
 @unittest.skipUnless(os.environ.get('DARKSLIDE_API_ORIGINAL') and os.environ.get('DARKSLIDE_IIIX_ZIP'), 'official inputs required')
 class Transport(Served):
+    synthetic_identity = False   # real official inputs: no synthetic test identity
+
     def test_dual_family_import_and_saved_prepare(self):
         raw3=Path(os.environ['DARKSLIDE_API_ORIGINAL']).read_bytes()
         rawx=Path(os.environ['DARKSLIDE_IIIX_ZIP']).read_bytes()
@@ -141,6 +143,8 @@ class Transport(Served):
                 self.assertEqual(self.call('POST','/api/projects/'+p['id']+'/save',{}).status,200)
                 r=self.call('POST','/api/projects/'+p['id']+'/film-prepare',dict(expected_changes=changes,request_id='http'))
                 self.assertEqual(r.status,200,r.body);self.assertEqual(r.json()['body']['status'],'protected_windows_unchanged')
-                self.assertEqual(self.call('POST','/api/projects/'+p['id']+'/generate',{}).status,422)
+                # Since 1.0 GR III films are generated for real, so /generate is no longer a 422 here; what this
+                # test guards is that the read-only check produced no output at all.
+                self.assertEqual(self.store.builds(),[])
             for p in reversed(projects):
                 r=self.call('GET','/api/projects/'+p['id']);self.assertEqual(r.json()['template_id'],p['template_id'])

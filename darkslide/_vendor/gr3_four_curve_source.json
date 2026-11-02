@@ -15,7 +15,8 @@
     "Preserve incoming output registers for stock fallback and original global-byte clear side effect.",
     "Guard stock outputs that point to repurposed banks3-5 by using intact banks6-8; unknown-record visual preservation remains unverified.",
     "Replace selected per-Gamma expansion with a four-byte-stack leaf sampler; independently compose RGB/Y directly from readonly33 knots.",
-    "Dispatch selected consumers at536E87C8, preserve stock fallback and original flags/canary/epilogue; no new private RAM."
+    "Dispatch selected consumers at536E87C8, preserve stock fallback and original flags/canary/epilogue; no new private RAM.",
+    "Firmware addresses go through fwaddr.A so the same source serves GR III 2.20 / IIIx 1.70 (LiorMoment, 2026-10-26); 2.10 / 1.60 output unchanged."
   ],
   "modified_by": "LiorMoment",
   "numeric_fitter": "Local exact-rational tridiagonal least-squares implementation; no upstream NumPy fitter or monotonic accumulate copied.",

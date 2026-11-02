@@ -17,5 +17,7 @@
 "%d 项": "%d개 항목",
 "项": "항목",
 "正面示意图": "정면도",
-"预览 LUT 与胶片数据来自 spektrafilm（Andrea Volpato，CC BY-SA 4.0），由 LiorMoment 修改（设定白点）；相机参数由 DARKSLIDE GR 拟合。": "미리 보기 LUT와 필름 데이터는 spektrafilm(Andrea Volpato, CC BY-SA 4.0)에서 가져와 LiorMoment가 수정(화이트 포인트 설정)했습니다. 카메라 파라미터는 DARKSLIDE GR이 피팅했습니다."
+"预览 LUT 与胶片数据来自 spektrafilm（Andrea Volpato，CC BY-SA 4.0），由 LiorMoment 修改（设定白点）；相机参数由 DARKSLIDE GR 拟合。": "미리 보기 LUT와 필름 데이터는 spektrafilm(Andrea Volpato, CC BY-SA 4.0)에서 가져와 LiorMoment가 수정(화이트 포인트 설정)했습니다. 카메라 파라미터는 DARKSLIDE GR이 피팅했습니다.",
+"下载 GR IIIx 1.70": "GR IIIx 1.70 다운로드",
+"gr3x_v170.zip / gr3x_v160.zip 不用解压，fwdc243b.bin 也可以": "gr3x_v170.zip / gr3x_v160.zip 는 압축을 풀 필요 없으며, fwdc243b.bin 도 됩니다"
 }

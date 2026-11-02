@@ -69,3 +69,6 @@
 `darkslide/film_inplace_cache.py` 延续采用上述固定提交 `make_slots16.py` 的零表身份核对与八个指针重定位部分（MIT，Copyright (c) 2026 idontknownihil）；由 LiorMoment 修改为四位置部分安装、严格身份检查及稀疏窗口计划。来源、原文件哈希和修改范围见 `darkslide/_vendor/gr3_zero_table_source.json`，许可全文仍见 `GR3_FILM_MODS_LICENSE.txt`。重复矩阵的无损重建为本项目实现。未采用 GR IV 数据或上游整包构建器。
 
 - GR IIIx 1.60 的只读稀疏核对复用同一 33 节点与零表方案，绑定 IIIx 官方输入与独立读回；来源记录见 `darkslide/gr3x_inplace_sources.json`，上述 MIT 许可及数据 CC BY-SA 许可继续保留。照片配方扩展 1.0 不提供。
+
+- 鲜艳第五位置沿用上述已署名的 33 节点读取、后矩阵与零表模板；由 LiorMoment 增加五位置选择、鲜艳私有记录、标准参数代理及独立读回。正片、负片与原厂校准数据保留；未选择鲜艳时仍使用原四位置实现。新增预编译资源 `darkslide/data/film_arm_vivid5_v1.json` 与独立核对资源 `darkslide/film_vivid_fifth_reference.json` 只包含本项目及上述 MIT 衍生代码片段，不包含原厂数组。对应源码为 `darkslide/film_vivid_fifth.py`，构建与许可规则同上。
+- GR III 2.20／GR IIIx 1.70 的第五位置使用单独的重定位预编译资源 `darkslide/data/film_arm_vivid5_220_v1.json` 和独立核对资源 `darkslide/film_vivid_fifth_reference_220.json`，沿用相同来源与许可。两个版本的地址、输入身份及原厂保留范围分别核对，旧版资源保留。

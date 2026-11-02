@@ -7,7 +7,7 @@ Back to the [README](../../README.en.md). This page explains each feature in det
 ## Testing status (details)
 
 - Your camera may fail to boot, stop working properly, or be **permanently bricked**. You may also lose warranty and official support.
-- The author has flashed and tested it on **one** GR III (firmware 2.10): icons and preset names for all 12 open presets (including names lengthened to the limit), the shutdown screen, Negative Film grain, several changes together, and flashing the official 2.10 original back afterwards, with no problems found. That is a sample of one camera, and your own icons, preset names and pictures have never been on real hardware; all pre-build checks run offline and are no substitute for testing on hardware.
+- The author flashed and tested earlier builds on **one** GR III (firmware 2.10): icons and preset names for all 12 open presets (including names lengthened to the limit), the shutdown screen, Negative Film grain, several changes together, and flashing the official 2.10 original back afterwards, with no problems found. That is a sample of one camera, and your own icons, preset names and pictures have never been on real hardware; all pre-build checks run offline and are no substitute for testing on hardware.
 - The 1.0 film writing was also tested once with four films on one regular GR III; the author found no problems, but the item-by-item record is not finished, and your film combination may never have been tested. The GR III HDF was tested on one camera by user @Ady0402 (generating, flashing, films, preset names and the Traditional Chinese menu all worked, and film presets are no longer over-exposed). The standard GR IIIx was flashed and used normally on one camera by a user. The GR III Street and Diary editions and the GR IIIx Urban and HDF editions have **not been tested on real hardware**; you confirm the risk before generating.
 - The menu order and soft glow added in 1.5 were flashed together with four films on one regular GR III; the author found no problems, but the item-by-item record is not finished. On the GR IIIx (including the standard one) and on HDF bodies they are "adapted, not camera-tested"; a GR IIIx build that uses either asks you to confirm the risk every time.
 - This project is not affiliated with or endorsed by RICOH. The author accepts no liability for any damage.
@@ -38,12 +38,12 @@ Give the presets in your GR III menu **your own icons and names**. For example, 
 
 - **Two ways to make an icon**: upload any image and frame it with the crop box, or type a few letters to generate a text icon in the factory style.
 - **Preset names**: checked as you type, e.g. characters the camera can't display; typing stops at the length limit. The English menu and the camera menu language you pick above Generate (any of the firmware's 21 languages; new projects preselect your computer's language, so check it matches the camera) show the new name, other languages keep the factory name (Traditional Chinese was confirmed on a GR III HDF; the other added languages are untested on a camera); when a name is longer than the factory English name, one less common menu language also shows the new name.
-- **What it never touches**: apart from the films you install and Negative Film grain, colour rendering, image-quality parameters and all other settings stay as they are. The firmware version number does not change (GR III stays 2.10, GR IIIx stays 1.60). The detail-settings card shows each preset's factory default values for reference only; you adjust them yourself in the camera menu, and they are not written into the firmware.
+- **What it never touches**: apart from the films you install and Negative Film grain, colour rendering, image-quality parameters and all other settings stay as they are. The firmware version number stays the same as the imported official original. The detail-settings card shows each preset's factory default values for reference only; you adjust them yourself in the camera menu, and they are not written into the firmware.
 - **Projects**: drafts are saved automatically; save multiple versions, undo and redo, and pick up where you left off.
 
 **Film (new in 1.0)**
 
-Give Bleach Bypass, Retro, HDR Tone and Cross Processing a film each; the camera then shoots with that film's colours.
+Give Vivid, Bleach Bypass, Retro, HDR Tone and Cross Processing a film each; the camera then shoots with that film's colours.
 
 - **16 built-in films**: pick one as a starting point and fine-tune it with the sliders on the right. You can also use your own LUT instead; see "Put your own LUT into the camera" below.
 - **Icon and preset name follow the film**: picking a built-in film also changes that preset's camera icon and preset name to the film. The name is written to fit the preset, e.g. Retro holds 8 characters, so Portra 400 becomes "Port 400"; you can still edit it afterwards. Going back to no film restores the factory name.
@@ -54,6 +54,8 @@ Give Bleach Bypass, Retro, HDR Tone and Cross Processing a film each; the camera
 - **No growth**: written in place; the decoded program payload and its layout do not grow, although the compressed update file size can change.
 - **No developer tools needed**: the ARM fragments for writing films come precompiled and verified with the app; Mac and Windows users need no Xcode, Command Line Tools or clang.
 - **Tested so far**: the four-film writing was tested once on one regular GR III and the author reported no problems; the item-by-item record is still pending. The GR III HDF and the standard GR IIIx were tested on one camera each by users; the GR III Street and Diary editions and the GR IIIx Urban and HDF editions are "adapted, not camera-tested".
+
+The fifth slot, Vivid, is available on GR III 2.10 / 2.20 and GR IIIx 1.60 / 1.70. Positive Film and Negative Film remain unchanged; only selected slots are replaced. One five-film, wide-ratio and soft-glow test build was tested on one standard GR III running 2.10 and flashed back to official firmware once. The user reported basic use worked and soft-glow saving remained slow. Item-by-item testing, other bodies, versions and configurations remain unverified.
 
 **Put your own LUT into the camera (new in 1.0)**
 
@@ -128,11 +130,27 @@ Input: `fwdc243b.bin`, 30,391,788 bytes, SHA-256 `708e79f3b7b96a7e1581b4acf4c412
 - **No developer tools needed**: building uses bundled, precompiled ARM code fragments, so Mac and Windows users need no Xcode, Command Line Tools or clang. Missing or damaged fragments stop the build; download the complete program again. Only developers rebuilding the fragments need LLVM clang with `armv7a-none-eabi`. Full firmware building has not been validated on a real Windows machine.
 - **Old IIIx projects**: the project list can import an old IIIx data folder: review the list, then copy it in; the old folder is kept, and old user LUTs need to be fitted again.
 
+## GR III 2.20 / GR IIIx 1.70
+
+New firmware released by Ricoh on 2026-10-21.
+
+| Model · version | File | Size | SHA-256 |
+|---|---|---|---|
+| GR III · 2.20 | `fwdc239b.bin` | 30,472,516 bytes | `5c53760b3b564c87239dbf7f5c94d0f6fd91accd156ec4ba672ebfd6b861793e` |
+| GR IIIx · 1.70 | `fwdc243b.bin` | 30,472,528 bytes | `aa8e3ae1349d94e83be381c20530e41d5e57b75c27ef24ba81c7b017d6c11592` |
+
+- **Which file**: import the official file for the version your camera runs now (Menu › Setup › Firmware version). Never flash a file built from 2.10 onto a camera already on 2.20, or the other way round.
+- **What works**: exactly what 2.10 / 1.60 has — icons, preset names, Negative Film grain, menu order, films, importing and fitting LUTs and your own grades, Soft Glow and the shutdown image. GR IIIx 1.70 uses "Build offline candidate", like 1.60.
+- **How**: the new firmware's main program was recompiled and every address moved. DARKSLIDE GR uses an address table checked entry by entry; the films and Soft Glow were rebuilt at the new addresses and checked word by word to differ from the 2.10 / 1.60 versions only in addresses. The camera model used for fitting gives exactly the same base curve on the new firmware as on 2.10 / 1.60.
+- **Shutdown image**: 2.20 / 1.70 add 20th and 30th anniversary shutdown styles, and on a normal start-up the camera sets the style to the 30th anniversary (consistent with Ricoh saying the shutdown screen cannot be changed back after updating). On the new firmware DARKSLIDE GR's shutdown image covers all seven styles, so your picture shows whichever style is set; the two anniversary pictures themselves are left alone.
+- **Testing status**: all "adapted, not camera-tested": nothing has been flashed onto a camera yet, and flashing the official 2.20 / 1.70 back has not been verified. You confirm the risk before every build.
+
 ## How it keeps you safe
 
-- Inputs must match the built-in GR III 2.10 or GR IIIx 1.60 official originals; anything else is refused.
+- Inputs must match the built-in GR III 2.10 / 2.20 or GR IIIx 1.60 / 1.70 official originals; anything else is refused.
 - Every build starts again from the original, then a separate, independent unpacker takes the result apart and checks it. **Download is offered only if every check passes**, together with a build manifest listing what changed.
-- One more check that does not depend on what you changed: the version number is unchanged (GR III 2.10, GR IIIx 1.60), and the boot records and the firmware-update regions identified by the author's analysis are byte-for-byte untouched. This is meant to keep the official original usable for flashing back; flashing the official original back has been tested successfully on one GR III; this is still an offline check plus one camera, not a guarantee, and a camera that cannot power on at all is not covered.
+- A saved wide-ratio build from an older version is kept but cannot be downloaded if its record cannot distinguish whether it includes the date feature. Rebuild it with the current version to download it.
+- One more check that does not depend on what you changed: the version number stays the same as the imported official original, and the boot records and registered hard-protection windows are preserved; wide ratios modify the MENU startup path. One five-slot, wide-ratio and soft-glow test build was flashed back once on one standard GR III; other configurations and states may behave differently. This is not a guarantee, and a camera that cannot power on at all is not covered.
 - A built-in recovery guide shows you how to prepare a recovery card before flashing and how to flash back to official firmware if something goes wrong.
 
 The interface is available in 简体中文, 繁體中文, English, 日本語 and 한국어: it follows your system language, and you can change it from the language menu at the top right. The Traditional Chinese, English, Japanese and Korean texts were translated with AI assistance; corrections are welcome.

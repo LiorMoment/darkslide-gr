@@ -30,7 +30,7 @@ def unwrap(data, filename):
             members = [m for m in zf.infolist()
                        if not m.is_dir() and PurePosixPath(m.filename).name.lower() in (FIRMWARE_NAME, "fwdc243b.bin")]
             if not members:
-                raise ZipError("压缩包里没有已支持的官方固件，请导入 GR III 2.10 或 GR IIIx 1.60 官方包")
+                raise ZipError("压缩包里没有已支持的官方固件，请导入 GR III 2.10 / 2.20 或 GR IIIx 1.60 / 1.70 官方包")
             if len(members) > 1:
                 raise ZipError("压缩包里有不止一个固件候选，请解压后只导入所需官方 BIN")
             member = members[0]

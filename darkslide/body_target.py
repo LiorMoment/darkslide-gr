@@ -48,8 +48,8 @@ def require_family(body, model, firmware):
     """A declared body must belong to the template's family and its pinned firmware."""
     if body is None:
         return None
-    info = hdf_guard.FAMILIES.get(family(body))
-    _need(family(body) == model and info["version"] == firmware,
+    versions = {table[family(body)]["version"] for table in (hdf_guard.FAMILIES, hdf_guard.FAMILIES_220)}
+    _need(family(body) == model and firmware in versions,
           "工程选的机身 %s 和固件 %s %s 不是同一家族" % (body, model, firmware))
     return body
 
@@ -83,10 +83,14 @@ def build_report(decoded, body, candidate):
         raise BodyTargetError("机身保护窗核对失败：%s" % exc) from exc
 
 
-def shutdown_report(body):
+def shutdown_report(body, model=None):
     """Which factory CollaboMode routes the shutdown image covers. The body's
     current CollaboMode is unknown here, so it is passed as None, never guessed."""
-    report = hdf_body_support.shutdown_coverage(validate(body), tuple(shared_shutdown.REQUEST_IDS), None)
+    from . import models
+    new = model is not None and models.is_220(model)
+    report = hdf_body_support.shutdown_coverage(
+        validate(body), tuple(shared_shutdown.layout(model or models.GR3)['request_ids']), None,
+        hdf_body_support.MODES_220 if new else hdf_body_support.MODES)
     for flag in ("camera_verified", "compatibility_approved", "body_setting_inferred"):
         _need(report.get(flag) is False, "关机图覆盖报告越过研究边界：" + flag)
     return report

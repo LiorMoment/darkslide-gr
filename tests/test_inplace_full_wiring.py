@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from darkslide import compositor, edit_core, film_inplace_apply, generate, template, models
 
 class CompositeWiring(unittest.TestCase):
-    def build(self, bad=False, overlap=False):
+    def build(self, bad=False, overlap=False, slot=8):
         source=b'synthetic input'; before=bytes(64)
         film=bytearray(before); film[8:12]=b'film'
         if bad:film[20]=1
@@ -20,7 +20,7 @@ class CompositeWiring(unittest.TestCase):
             stack.enter_context(patch.object(edit_core,'apply_edits',return_value=(bytes(name),[dict(offset=at,length=4)])))
             writer=stack.enter_context(patch.object(film_inplace_apply,'apply',return_value=(bytes(film),[dict(offset=8,length=4,kind='film')])))
             pack=stack.enter_context(patch.object(edit_core,'_pack_payload',side_effect=lambda *args:dict(output=args[-2])))
-            result=compositor.build_inplace_composite(source,[dict(kind='film',slot=8,film='portra400'),dict(kind='name',slot=8,string_id=275,text='New')],template.load())
+            result=compositor.build_inplace_composite(source,[dict(kind='film',slot=slot,film='portra400'),dict(kind='name',slot=8,string_id=275,text='New')],template.load())
             self.assertEqual(writer.call_count,1);self.assertEqual(pack.call_count,1)
             return result
 
@@ -28,6 +28,12 @@ class CompositeWiring(unittest.TestCase):
         result=self.build()
         self.assertEqual(result['output'][4:12],b'namefilm')
         self.assertEqual(result['film_layout'],'inplace_history_cache_exit_v29')
+        self.assertEqual(result['decoded_growth_bytes'],0)
+
+    def test_vivid_uses_five_slot_adapter_and_still_merges_regular_once(self):
+        result=self.build(slot=2)
+        self.assertEqual(result['output'][4:12],b'namefilm')
+        self.assertEqual(result['film_layout'],'inplace_history_cache_exit_vivid5_v1')
         self.assertEqual(result['decoded_growth_bytes'],0)
 
     def test_overlap_and_undeclared_changes_reject(self):

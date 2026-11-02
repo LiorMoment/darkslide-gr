@@ -12,7 +12,7 @@ PAYLOAD_SHA, PAYLOAD_SIZE = codec.PAYLOAD_SHA, codec.PAYLOAD_SIZE
 _template, _require, _sha = codec._template, codec._require, codec._sha
 _icon, _string = codec._icon, codec._string
 _sum, _literal, _decode = codec._sum, codec._literal, codec._decode
-SOURCE_SHA256 = "49a0f51daf73181a60d8d1fe5fb777d2a2350c390fe9acf1940d83b36135bfd1"
+SOURCE_SHA256 = "b4cde6959ed2bd294ae5eb003e784985938cb23105c746130f48a9fcd8dab5db"
 
 
 def _validate_edits(edits, template):
@@ -55,13 +55,14 @@ def _lendable(payload, identifier, keep=KEEP_LANGUAGES):
     record (any language, any string) points into. Ties go to the lower language.
     Returns (record offset, text offset, length byte, address) or None."""
     spans, own = [], []
+    layout = codec._layout(payload)
     for language in range(21):
-        table = codec._u32(payload, 0x55002bac + language * 4)
+        table = codec._u32(payload, layout[4] + language * 4)
         for other in range(1, 785):
             record = codec._u32(payload, table + other * 4)
             if not record:
                 continue
-            r = codec._off(record, 8)
+            r = codec._off(record, 8, layout)
             count, lines, zeros = struct.unpack_from("<BBH", payload, r)
             va = struct.unpack_from("<I", payload, r + 4)[0]
             spans.append((va, va + count * 2))
@@ -70,7 +71,7 @@ def _lendable(payload, identifier, keep=KEEP_LANGUAGES):
     best = None
     for count, neg_language, r, va in sorted(own, reverse=True):
         if sum(1 for a, b in spans if a < va + count * 2 and b > va) == 1:
-            t = codec._off(va, count * 2)
+            t = codec._off(va, count * 2, layout)
             if payload[t + (count - 1) * 2:t + count * 2] == b"\0\0":
                 best = (r, t, count, va)
                 break
@@ -81,7 +82,7 @@ def apply_edits(before, edits, template):
     """Apply validated name/icon edits to the official payload, without packing."""
     slots = _validate_edits(edits, template)
     model = models.for_template(template)
-    _require(type(before) is bytes and len(before) == PAYLOAD_SIZE and
+    _require(type(before) is bytes and len(before) == (model.payload_size if models.is_220(model) else PAYLOAD_SIZE) and
              _sha(before) == model.payload_sha, "immutable official payload required")
     after, changes, ranges = bytearray(before), [], []
 

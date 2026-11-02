@@ -11,21 +11,20 @@ window.DarkslideGuide = (function () {
   const FLOWS = {
     start: [
       { target: () => document.querySelector("#models .model.on"), title: "先选你的相机",
-        text: "支持 GR III（固件 2.10）和 GR IIIx（固件 1.60）两个系列，GR IV 适配中。下面再选具体型号。" },
+        text: "支持 GR III（固件 2.10、2.20）和 GR IIIx（固件 1.60、1.70）两个系列，GR IV 适配中。下面再选具体型号。" },
       { target: () => document.getElementById("drop"), title: "把官方固件拖到这里",
         text: "从理光官网下载对应系列的官方固件：GR III 是 fwdc239b.bin，GR IIIx 是 fwdc243b.bin。工具会核对是不是官方原件，文件只留在你的电脑上。" },
     ],
-    // 下一版 (user 2026-10-25: 菜单排序 and 柔光 ship, for GR III and GR IIIx; 画幅 comes later). The
-    // version number is not decided yet, so the corner says NEW until it is.
+    // 1.6.1: the new firmware and the fifth film position, both said to be untested on a camera.
     news: [
-      { label: "这一版新增", badge: "NEW", title: "界面换了新样子",
-        lines: ["圆角卡片、新的字母图标，预设名不再被截断", "右上角可以切换：跟随系统 / 深色 / 淡色",
-                "胶片换成小方块；你自己的胶片图标直接显示原图", "拖动排序时，指针换成了小奶猫爪"],
+      { label: "这一版新增", badge: "NEW", title: "新固件、鲜艳胶片和新画幅",
+        lines: ["支持 GR III 2.20 和 GR IIIx 1.70（还没在相机上实测）", "鲜艳也能装胶片，一共 5 个预设（一个测试包在一台 GR III 2.10 上试过）", "新增 16:9 和 65:24 画幅，只裁 JPEG、RAW 保持 3:2。只支持固件 2.10 和 1.60，2.20 和 1.70 暂不支持（一个测试包在 GR III 2.10 试过，GR IIIx 1.60 未实测）",
+                "相机菜单语言默认跟界面语言一致", "修了键盘调滑块、自定义胶片图标等几个小问题"],
         next: "带我看看", skip: "以后再说" },
     ],
     tour: [
-      { target: () => document.getElementById("themeSeg"), title: "深色还是淡色",
-        text: "跟随系统、深色、淡色三选一，这台电脑会记住。第一次打开是淡色。" },
+      { target: () => document.getElementById("slots"), title: "鲜艳也能装胶片了",
+        text: "选中鲜艳，再点一卷胶片。正片、负片保持原厂；没装胶片的位置也不变。这个位置有一个测试包在一台 GR III 2.10 上试过，其他配置仍需验证，生成前要勾选确认。" },
       { target: () => document.getElementById("slots"), title: "按住拖动，排相机菜单顺序",
         text: "按住预设上下拖，就是相机影像控制菜单里的顺序。鼠标移上去会出现 ⠿；自定义 1、2 固定在最后。", next: "知道了" },
     ],
@@ -35,7 +34,7 @@ window.DarkslideGuide = (function () {
       { target: () => document.getElementById("iconField"), title: "点图标就能换",
         text: "名字在旁边改，只能用英文；右边的数字是还能写几个字。" },
       { target: () => document.getElementById("filmField"), title: "点一卷胶片当起点",
-        text: "预览会马上变。「＋ 添加」可以导入自己的 LUT 或 Lightroom 预设。只有银流冲洗、怀旧、HDR 色调、交叉冲洗这 4 个预设能把胶片写进相机。" },
+        text: "预览会马上变。「＋ 添加」可以导入自己的 LUT 或 Lightroom 预设。鲜艳、银流冲洗、怀旧、HDR 色调、交叉冲洗这 5 个预设能把胶片写进相机。" },
       { target: () => document.getElementById("adjustPanel"), title: "在胶片基础上微调",
         text: "标「可写进相机」的会一起写进相机；标「仅预览/导出」的只进导出的 .cube。装了胶片的预设和「标准」共用相机里那组调节值，比较胶片前先把「标准」的调节归零。" },
       { target: () => document.querySelector("#paneIC .v1-out"), title: "看相机能还原多少",

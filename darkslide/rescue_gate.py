@@ -35,6 +35,15 @@ PROTECTED = (
     ("rescue_updater_window", "更新器代码未被改动（版本比较、校验、写入调度）", 0x53620000, 0x53640000),
     ("rescue_bootflow_window", "开机与更新流程代码未被改动", 0x53820000, 0x53840000),
 )
+# GR III 2.20 / GR IIIx 1.70 (rebuilt main system): the same two windows, re-located function by
+# function (431 updater and 609 boot/update-flow functions paired in order; the boot/update-flow
+# window grew by 0x38). Located by the author's own comparison of the official 2.10 and 2.20 packages.
+PROTECTED_220 = (
+    ("rescue_updater_window", "更新器代码未被改动（版本比较、校验、写入调度）", 0x536200F0, 0x536400F0),
+    ("rescue_bootflow_window", "开机与更新流程代码未被改动", 0x5381FFD8, 0x53840010),
+)
+# Decoded length -> windows. The two firmware generations differ in length.
+WINDOWS_BY_LENGTH = {59718388: PROTECTED, 59798532: PROTECTED_220}
 
 
 class GateError(ValueError):
@@ -104,7 +113,8 @@ def gate_payloads(before, after):
     other_bad = [n for n in changed if n not in MAY_CHANGE and n not in BOOT_CHAIN]
     add("rescue_other_records", "RTOS、ICONBIN、RES 以外的记录与原件逐字节相同", not other_bad,
         "、".join(other_bad))
-    for cid, title, lo, hi in PROTECTED:
+    # Only the 2.20 / 1.70 length switches windows; everything else is checked exactly as before.
+    for cid, title, lo, hi in WINDOWS_BY_LENGTH.get(len(before), PROTECTED):
         a, b = lo - RTOS_VA + RTOS_BODY, hi - RTOS_VA + RTOS_BODY
         hit = _first_difference(before[a:b], after[a:b])
         add(cid, title, hit is None, "" if hit is None else "首个差异 VA 0x%08X" % (lo + hit))
@@ -123,7 +133,8 @@ def gate(official, output, model_id=None):
         add("rescue_input_identity", "官方原件机型身份", hashlib.sha256(official).hexdigest() == model.input_sha)
         _need(type(official) is bytes and type(output) is bytes and len(output) >= 0x80, "inputs")
         words = [output[o:o + 4] for o in VERSION_OFFSETS]
-        add("rescue_version", ("版本字段保持 %s 原值；仅静态核对，IIIx 同版本回刷未实测" % model.firmware) if model == models.GR3X else "版本字段仍是 2.10（02 0A 15 1B）：按代码分析，官方 2.10 包不会因版本更旧被拒（同版本刷回已在一台 GR III 上实测）",
+        add("rescue_version", ("版本字段保持 %s 原值；仅静态核对，同版本回刷未实测" % model.firmware) if models.is_220(model) else
+            ("版本字段保持 %s 原值；仅静态核对，IIIx 同版本回刷未实测" % model.firmware) if model == models.GR3X else "版本字段仍是 2.10（02 0A 15 1B）：版本检查通过；旧版曾实测刷回，本次第五槽、画幅与柔光组合尚未验证刷回",
             all(w == model.version for w in words) and
             all(official[o:o + 4] == model.version for o in VERSION_OFFSETS),
             " / ".join(w.hex() for w in words))
@@ -136,6 +147,14 @@ def gate(official, output, model_id=None):
 
 def all_ok(checks):
     return type(checks) is list and bool(checks) and all(c.get("ok") is True for c in checks)
+
+
+def rescue_note(model):
+    """The rescue card wording for this model's official package."""
+    if model == models.GR3:
+        return dict(RESCUE_NOTE)
+    return dict(RESCUE_NOTE, official_file="%s（理光官方 %s %s 原包）" % (model.filename, model.name, model.firmware),
+                official_sha256=model.input_sha)
 
 
 RESCUE_NOTE = dict(

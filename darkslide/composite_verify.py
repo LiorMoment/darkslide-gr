@@ -8,12 +8,19 @@ Entropy/pixel decoding remains the caller's separate image validation step.
 """
 import hashlib
 import struct
-from . import fwread, menu_order_verify, models, soft_glow_verify
+from . import fwaddr, fwread, menu_order_verify, models, soft_glow_verify, wide_ratio_verify
 
 IDENTIFIERS = ((358, 4), (548, 268), (354, 269), (357, 270), (350, 271),
                (352, 272), (232, 274), (346, 275), (356, 276), (351, 277),
                (50, 278), (23, 273), (347, 279), (348, 280))
 DIARY_PATH = b"B:\\Resource\\Jpeg\\GB_Diary.jpg"
+# This checker's own view of the two firmware generations, by decoded length:
+# (RES record offset, RES entries, zero bytes after RES, grain descriptor table, grain item list).
+# GR III 2.20 / GR IIIx 1.70 added two shutdown JPEGs to RES (35 -> 37 entries, one pad byte).
+LAYOUTS = {
+    59718388: (53123096, 35, 0, 0x53B3488C, 0x53B3500C),
+    59798532: (53123416, 37, 1, 0x53B341B4, 0x53B34934),
+}
 
 
 def _need(ok, message):
@@ -62,17 +69,17 @@ def _padding_only(submitted, actual):
 
 
 def _resources(payload):
-    head = 53123096
+    head, count, pad = LAYOUTS.get(len(payload), LAYOUTS[59718388])[:3]
     _need(payload[head:head + 8] == b'RES\0\0\0\0\0' and
-          struct.unpack_from('<I', payload, head + 12)[0] == 35, 'RES identity')
+          struct.unpack_from('<I', payload, head + 12)[0] == count, 'RES identity')
     rows, at = [], head + 16
-    for _ in range(35):
+    for _ in range(count):
         _need(at + 36 <= len(payload) - 4, 'RES header bound')
         length = struct.unpack_from('<I', payload, at + 32)[0]
         _need(length > 0 and at + 36 + length <= len(payload) - 4, 'RES body bound')
         rows.append((at, at + 36, length, payload[at:at + 32].split(b'\0', 1)[0]))
         at += 36 + length
-    _need(at == len(payload) - 4, 'RES tail')
+    _need(at == len(payload) - 4 - pad and not any(payload[at:at + pad]), 'RES tail')
     return rows
 
 
@@ -140,23 +147,38 @@ disk here, and passing checks does not change the generation availability gate.
     try:
         model = models.for_template(template)
         _need(type(film_layout) is str and
-              film_layout in ('legacy_arena_v1', 'four_curve_v1', 'inplace_history_cache_exit_v29'), 'film layout')
-        _need(type(edits) is list and len(edits) <= 30 and (edits or jpeg is not None), 'request')
+              film_layout in ('legacy_arena_v1', 'four_curve_v1', 'inplace_history_cache_exit_v29', 'inplace_history_cache_exit_vivid5_v1', 'inplace_history_cache_exit_vivid5_220_v1'), 'film layout')
+        _need(type(edits) is list and (edits or jpeg is not None), 'request')
+        _need(len(edits) <= 31, 'too many edits')
         _need(all(type(edit) is dict for edit in edits), 'edit object')
         film_edits = [edit for edit in edits if edit.get('kind') == 'film']
         menu_edits = [edit for edit in edits if edit.get('kind') == 'menu_order']
         glow_edits = [edit for edit in edits if edit.get('kind') == 'soft_glow']
-        other_edits = [edit for edit in edits if edit.get('kind') not in ('film', 'menu_order', 'soft_glow')]
-        _need(len(edits) - len(menu_edits) - len(glow_edits) <= 28, 'request')
-        _need(len(glow_edits) <= 1 and all(e == {'kind': 'soft_glow', 'version': 'v22.6'} for e in glow_edits),
+        wide_edits = [edit for edit in edits if edit.get('kind') == 'wide_ratio']
+        other_edits = [edit for edit in edits if edit.get('kind') not in ('film', 'menu_order', 'soft_glow', 'wide_ratio')]
+        _need(len(edits) - len(menu_edits) - len(glow_edits) - len(wide_edits) <= 29, 'too many edits')
+        _need(len(wide_edits) <= 1 and not (wide_edits and glow_edits) and
+              all(set(e) - {'date'} == {'kind', 'version', 'glow'} and e['version'] == 'wide16' and type(e['glow']) is bool and
+                  ('date' not in e or (e['date'] is True and e['glow'] is True)) for e in wide_edits),
+              'wide ratio request')
+        _need(model in (models.GR3, models.GR3X) or not wide_edits, 'wide ratio: GR III 2.10 / GR IIIx 1.60 packages only')
+        _need(len(glow_edits) <= 1 and all(e == {'kind': 'soft_glow', 'version': 'v22.28'} for e in glow_edits),
               'soft glow request')
-        _need(model in (models.GR3, models.GR3X) or not glow_edits, 'soft glow: GR III 2.10 / GR IIIx 1.60 packages only')
-        _need(model == models.GR3 or not film_edits, 'IIIx ordinary verifier does not accept film edits')
+        _need(model in models.ALL or not glow_edits, 'soft glow: GR III 2.10 / 2.20 and GR IIIx 1.60 / 1.70 packages only')
+        _need(model == models.GR3 or not film_edits or
+              (model == models.GR3_220 and film_layout in ('inplace_history_cache_exit_v29', 'inplace_history_cache_exit_vivid5_220_v1')),
+              'IIIx ordinary verifier does not accept film edits')
         # GR IIIx 1.60 holds the seven tables at the GR III 2.10 offsets; menu_order_verify pins both payloads.
-        _need(model in (models.GR3, models.GR3X) or not menu_edits, 'menu order: GR III 2.10 / GR IIIx 1.60 packages only')
+        _need(model in (models.GR3, models.GR3X, models.GR3_220, models.GR3X_170) or not menu_edits,
+              'menu order: GR III 2.10 / 2.20 and GR IIIx 1.60 / 1.70 packages only')
         _need(len(other_edits) <= 24, 'too many regular edits')
-        if film_layout == 'inplace_history_cache_exit_v29':
+        if film_layout in ('inplace_history_cache_exit_v29', 'inplace_history_cache_exit_vivid5_v1', 'inplace_history_cache_exit_vivid5_220_v1'):
             from . import film_inplace_complete as film_backend
+            vivid_layout = ('inplace_history_cache_exit_vivid5_220_v1' if model == models.GR3_220
+                            else 'inplace_history_cache_exit_vivid5_v1')
+            expected_layout = vivid_layout if any(e.get('slot') == 2 for e in film_edits) else 'inplace_history_cache_exit_v29'
+            _need(film_layout == expected_layout,
+                  'film selection/layout mismatch')
             profiles = None
         elif film_layout == 'four_curve_v1':
             from . import film_four_verify as film_backend
@@ -182,6 +204,7 @@ disk here, and passing checks does not change the generation availability gate.
         add('footer_identity', oldfoot[:3] == newfoot[:3] and oldfoot[4] == newfoot[4])
         add('metadata', oldmeta == newmeta)
         p = fwread.Payload(before) if model == models.GR3 else fwread.Payload(before, models.layout(model))
+        grain_table, grain_list = LAYOUTS.get(len(before), LAYOUTS[59718388])[3:]
         expected, spans = bytearray(before), []
 
         def write(at, data):
@@ -209,9 +232,9 @@ disk here, and passing checks does not change the generation availability gate.
             if kind == 'grain_menu':
                 _need(set(edit) == {'kind', 'slot', 'mode'} and no == 12 and
                       type(edit['mode']) is int and edit['mode'] == 22, 'grain scope')
-                row = p.off(0x53B3488C) + 6 * 8
-                start = p.off(0x53B3500C)
-                _need(before[row:row+8] == struct.pack('<II', 0x53B3500C, 9) and
+                row = p.off(grain_table) + 6 * 8
+                start = p.off(grain_list)
+                _need(before[row:row+8] == struct.pack('<II', grain_list, 9) and
                       before[start:start+18] == bytes.fromhex('0200020102020203020402050206020d000e') and
                       before[start+18:start+28] == b'\x00\x00OnStart\x00', 'grain stock layout')
                 write(row+4, struct.pack('<I', 10))
@@ -263,8 +286,10 @@ disk here, and passing checks does not change the generation availability gate.
                         if other['record_offset'] != at:
                             write(other['record_offset'], record)
         add('icon_name_expected', True)
-        if film_edits and film_layout == 'inplace_history_cache_exit_v29':
-            evidence, actual_windows = film_backend.readback(bytes(before), bytes(after), film_edits, film_profiles)
+        if film_edits and film_layout in ('inplace_history_cache_exit_v29', 'inplace_history_cache_exit_vivid5_v1', 'inplace_history_cache_exit_vivid5_220_v1'):
+            with fwaddr.firmware(model):
+                evidence, actual_windows = film_backend.readback(bytes(before), bytes(after), film_edits, film_profiles)
+            _need(evidence.get('layout') == film_layout, 'film readback/layout mismatch')
             for field in ('data_verified', 'shared_bytes_match_reference', 'complete_window_coverage_verified'):
                 _need(evidence.get(field) is True, 'v29 ' + field)
                 add('film_inplace_' + field, True)
@@ -300,7 +325,13 @@ disk here, and passing checks does not change the generation availability gate.
             for at, data in checked['spans']:
                 write(at, data)
             add('soft_glow_windows', True, '%d windows' % checked['windows'])
-        row, start = p.off(0x53B3488C) + 6 * 8, p.off(0x53B3500C)
+        if wide_edits:
+            checked = wide_ratio_verify.verify(bytes(before), bytes(after), wide_edits[0]['glow'], wide_edits[0].get('date', False))
+            _need(checked['scope'] == 'wide_ratio_windows_only', 'wide ratio scope')
+            for at, data in checked['spans']:
+                write(at, data)
+            add('wide_ratio_windows', True, '%d windows' % checked['windows'])
+        row, start = p.off(grain_table) + 6 * 8, p.off(grain_list)
         add('grain_menu_expected', after[row:row+8] == expected[row:row+8] and
             after[start:start+28] == expected[start:start+28])
         q = fwread.Payload(after, pinned=False) if model == models.GR3 else fwread.Payload(after, models.layout(model), pinned=False)
@@ -334,9 +365,12 @@ disk here, and passing checks does not change the generation availability gate.
             write(body, actual)
             write(head, b'A')
             write(at, b'A')
-            for request in (2, 3, 10, 11, 12):
+            # 2.20 / 1.70 also route the 20th / 30th-anniversary requests 13 and 14 (CollaboMode 5 / 6;
+            # the normal start-up branch sets mode 6) to the same picture.
+            seven = models.is_220(model)
+            for request in (2, 3, 10, 11, 12) + ((13, 14) if seven else ()):
                 write(p.off(0x55002b78 + 4 * request), struct.pack('<I', desc))
-            add('a_path_five_requests_fixed_slot_jpeg', True)
+            add('a_path_seven_requests_fixed_slot_jpeg' if seven else 'a_path_five_requests_fixed_slot_jpeg', True)
         check_value = (2 ** 32 - _sum32(expected[:-4])) % (2 ** 32)
         expected[-4:] = check_value.to_bytes(4, 'little')
         # This exact comparison also protects all other icons, languages, request

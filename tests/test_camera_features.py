@@ -1,6 +1,6 @@
 """柔光 / 65:24 wide ratio switches (whole-camera features, user 2026-10-24): format checks, storage in the
-draft and the saved project, the capability gate (2026-10-25: 柔光 on for GR III / GR IIIx, 65:24 still off),
-the draft route, generation writing 柔光 and refusing a project that has 65:24 on instead of leaving it out."""
+draft and the saved project, the capability gate (柔光 on for GR III / GR IIIx, wide ratios on for both too),
+the draft route, generation writing them and refusing the wide ratios on an HDF body instead of leaving them out."""
 import json
 import tempfile
 import unittest
@@ -37,22 +37,24 @@ class Clean(unittest.TestCase):
         self.assertEqual(camera_features.clean(dict(soft_glow=False), {}), {})   # off is always fine
         self.assertEqual(camera_features.clean(ALL_ON, dict(soft_glow=True, wide_ratio=True)), ALL_ON)
 
-    def test_both_series_take_soft_glow_but_not_the_wide_ratio(self):
+    def test_both_series_take_both(self):
         for model in (models.GR3, models.GR3X):
             caps = models.capabilities(model)
             self.assertIs(caps["soft_glow"], True, model.name)
-            self.assertIs(caps["wide_ratio"], False, model.name)
+            self.assertIs(caps["wide_ratio"], True, model.name)
 
     def test_refusal_names_what_cannot_be_written(self):
         self.assertIsNone(camera_features.refusal(None))
         self.assertIsNone(camera_features.refusal({}))
         self.assertIsNone(camera_features.refusal(dict(soft_glow=True)))
-        self.assertEqual(camera_features.refusal(ALL_ON), "65:24 宽幅还没有接进固件生成，这次不能生成；请先把开关关掉")
+        self.assertIsNone(camera_features.refusal(ALL_ON))
+        self.assertIn("更新/恢复", camera_features.refusal(dict(ALL_ON, date_stamp=True)))
 
     def test_edits(self):
         self.assertEqual(camera_features.edits(None), [])
-        self.assertEqual(camera_features.edits(dict(wide_ratio=True)), [])
-        self.assertEqual(camera_features.edits(dict(soft_glow=True)), [dict(kind="soft_glow", version="v22.6")])
+        self.assertEqual(camera_features.edits(dict(wide_ratio=True)), [dict(kind="wide_ratio", version="wide16", glow=False)])
+        self.assertEqual(camera_features.edits(ALL_ON), [dict(kind="wide_ratio", version="wide16", glow=True)])
+        self.assertEqual(camera_features.edits(dict(soft_glow=True)), [dict(kind="soft_glow", version="v22.28")])
 
 
 class Storage(unittest.TestCase):
@@ -77,8 +79,9 @@ class Storage(unittest.TestCase):
         self.assertFalse(p["unsaved"])
 
     def test_cannot_turn_on_while_the_model_cannot_take_it(self):
-        with self.assertRaisesRegex(StoreError, "65:24 宽幅 还不能装进这台相机"):
-            self.store.put_draft(self.pid, {"2": {"name": "V"}}, self.t, camera_features=dict(wide_ratio=True))
+        with patch.object(models, "capabilities", caps_with(wide_ratio=False)):
+            with self.assertRaisesRegex(StoreError, "16:9 和 65:24 宽幅 还不能装进这台相机"):
+                self.store.put_draft(self.pid, {"2": {"name": "V"}}, self.t, camera_features=dict(wide_ratio=True))
         self.assertNotIn("camera_features", json.loads((self.dir / "draft.json").read_text(encoding="utf-8")) if (self.dir / "draft.json").exists() else {})
         p = self.store.put_draft(self.pid, {}, self.t, camera_features=dict(soft_glow=False))
         self.assertEqual(p["draft"]["camera_features"], {})
@@ -105,10 +108,10 @@ class Storage(unittest.TestCase):
             self.assertNotIn("camera_features", self.read("project.json"))
 
     def test_saved_switch_the_model_can_no_longer_take_is_not_saved_again(self):
-        with patch.object(models, "capabilities", caps_with(wide_ratio=True)):
-            self.store.put_draft(self.pid, {}, self.t, camera_features=dict(wide_ratio=True))
-        with self.assertRaisesRegex(StoreError, "这次没有保存"):
-            self.store.save(self.pid, self.t)
+        self.store.put_draft(self.pid, {}, self.t, camera_features=dict(wide_ratio=True))
+        with patch.object(models, "capabilities", caps_with(wide_ratio=False)):
+            with self.assertRaisesRegex(StoreError, "这次没有保存"):
+                self.store.save(self.pid, self.t)
 
     def test_bad_shape_is_refused_and_nothing_written(self):
         before = (self.dir / "draft.json").read_bytes() if (self.dir / "draft.json").exists() else None
@@ -119,11 +122,12 @@ class Storage(unittest.TestCase):
 
 
 class Generation(unittest.TestCase):
-    def test_a_project_with_one_on_is_refused(self):
+    def test_wide_ratio_on_an_hdf_body_is_refused(self):
         t = test_http.fake_template()
-        project = dict(id="synthetic", changes={"2": {"name": "V"}}, camera_features=dict(wide_ratio=True))
-        with patch.object(generate.compositor, "build_composite", side_effect=AssertionError("no build")):
-            with self.assertRaisesRegex(generate.GenerateError, "65:24 宽幅还没有接进固件生成"):
+        project = dict(id="synthetic", changes={"2": {"name": "V"}}, camera_features=dict(wide_ratio=True), target_body="GR III HDF")
+        # Isolate the existing HDF check, which follows the temporary generation guard.
+        with patch.object(camera_features, "refusal", return_value=None), patch.object(generate.compositor, "build_composite", side_effect=AssertionError("no build")):
+            with self.assertRaisesRegex(generate.GenerateError, "还不支持 HDF 机身"):
                 generate.run(None, project, t, b"")
 
     def test_soft_glow_alone_is_a_change_and_reaches_the_compositor(self):
@@ -138,10 +142,10 @@ class Generation(unittest.TestCase):
         with patch.object(generate.compositor, "build_composite", side_effect=stop):
             with self.assertRaisesRegex(generate.GenerateError, "synthetic stop"):
                 generate.run(None, project, t, b"")
-        self.assertEqual(seen["edits"], [dict(kind="soft_glow", version="v22.6")])
+        self.assertEqual(seen["edits"], [dict(kind="soft_glow", version="v22.28")])
         rows = generate.summarize({}, t, features=dict(soft_glow=True))
         self.assertEqual(rows[0]["preset"], "柔光")
-        self.assertIn("v22.6", generate.verification_note(seen["edits"], t))
+        self.assertIn("优化版", generate.verification_note(seen["edits"], t))
 
 
 class DraftApi(test_http.Served):
@@ -151,10 +155,11 @@ class DraftApi(test_http.Served):
         value = self.assertJson(self.call("GET", "/api/projects/%s" % pid), 200)
         self.assertEqual(value["draft"]["camera_features"], {})
         self.assertIs(value["capabilities"]["soft_glow"], True)
-        self.assertIs(value["capabilities"]["wide_ratio"], False)
-        res = self.call("PUT", url, {"changes": {}, "camera_features": {"wide_ratio": True}})
+        self.assertIs(value["capabilities"]["wide_ratio"], True)
+        with patch.object(models, "capabilities", caps_with(wide_ratio=False)):
+            res = self.call("PUT", url, {"changes": {}, "camera_features": {"wide_ratio": True}})
         self.assertEqual(res.status, 400)
-        self.assertIn("65:24 宽幅 还不能装进这台相机", res.json()["error"])
+        self.assertIn("16:9 和 65:24 宽幅 还不能装进这台相机", res.json()["error"])
         value = self.assertJson(self.call("PUT", url, {"changes": {}, "camera_features": {"soft_glow": True}}), 200)
         self.assertEqual(value["draft"]["camera_features"], {"soft_glow": True})
         value = self.assertJson(self.call("PUT", url, {"changes": {}, "camera_features": {"soft_glow": False}}), 200)

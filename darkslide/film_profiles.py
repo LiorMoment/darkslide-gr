@@ -14,7 +14,7 @@ def validate_profile(profile,ident,model_id=None):
         raise FilmRequestError("相机胶片数据格式或编号不匹配")
     if profile.get("model")!=model.name or profile.get("firmware")!=model.firmware:
         raise FilmRequestError("胶片数据不适用于 "+model.name+" "+model.firmware)
-    if model==models.GR3X and ident.startswith("user_lut_"):
+    if models.is_iiix(model) and ident.startswith("user_lut_"):
         if profile.get("official_sha256")!=model.input_sha or profile.get("base_model_id")!="gr3x-160-upstream-neutral-stubbed-v2":
             raise FilmRequestError("IIIx 用户拟合参数缺少匹配的基础模型身份")
     try:
@@ -63,6 +63,12 @@ def load_profile(ident,model_id=None):
         validated=dict(validated,model=model.name,firmware=model.firmware,
             compatibility=dict(source_model="GR III",source_firmware="2.10",target=model.id,
                 evidence="IIIx 1.60 layout and synthetic neutral base comparison",
+                native_effect_verified=False))
+    elif models.is_220(model):
+        # Same film data: 2.20 / 1.70 hold the 2.10 / 1.60 factory curves, matrices and Standard base.
+        validated=dict(validated,model=model.name,firmware=model.firmware,
+            compatibility=dict(source_model="GR III",source_firmware="2.10",target=model.id,
+                evidence="2.20 / 1.70 factory curves, look matrices and emulated Standard base equal 2.10 / 1.60",
                 native_effect_verified=False))
     return validate_profile(validated,ident,model.id)
 

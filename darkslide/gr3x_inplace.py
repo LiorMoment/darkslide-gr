@@ -9,13 +9,15 @@ from .film_patch_plan import PlanImage,_branch
 from .gr3x_inplace_support import _getter_source,_post_source,_composer_source,MODE_CHANGE_WORDS,_numeric
 from .film_requests import validate_batch,FilmRequestError
 from .film_profiles import validate_profile
-from .film_writer import _init_tail,SLOT_INFO,HDR_FIXES
+from .film_writer import _init_tail,SLOT_INFO,HDR_FIXES,hdr_fixes
 from .gr3x_inplace_proxy import derive,ACTIVE,mask_slots
 from .fwread import Payload
 from . import models, film_own_checks
 from .gr3x_factory_envelope import factory_envelope_from_payload
 from ._vendor.gr3_four_curve_hooks import point_source
 from ._vendor.gr3_film_hooks import csp_entry
+from .fwaddr import A as fa
+from . import fwaddr
 
 LAYOUT='gr3x160_inplace_cache_exit_v1'
 
@@ -29,7 +31,7 @@ def need(v,m):
     if not v:raise ValueError(m)
 
 def data_layout():
-    base=DATA[0][0]
+    base=fa(DATA)[0][0]
     slots=[]
     for i in range(4):
         slots.append(dict(slot=8+i,record=base+i*84,matrix=base+336+i*20,
@@ -41,12 +43,12 @@ def _ma_copy_source():
     # Adapt only a source exactly matching the original repeated table.
     # Other memcpy requests keep the original function and ABI.
     return f'''
-        movw ip, #{MATRIX_TEMPLATE & 65535}
-        movt ip, #{MATRIX_TEMPLATE >> 16}
+        movw ip, #{fa(MATRIX_TEMPLATE) & 65535}
+        movt ip, #{fa(MATRIX_TEMPLATE) >> 16}
         cmp r1, ip
-        bne abs(0x5313fd80)
+        bne abs({fa(0x5313fd80):#x})
         cmp r2, #0x870
-        bne abs(0x5313fd80)
+        bne abs({fa(0x5313fd80):#x})
         push {{r4-r11}}
         mov ip, r0
         ldm r1!, {{r3-r11}}
@@ -65,13 +67,13 @@ def _ma_ctor_source(copy_at):
     # Replace the original zero-fill at the end of the constructor. Populate
     # the same private buffer and publish a valid source before ctor returns.
     return f'''
-        movw ip, #{MATRIX_TEMPLATE & 65535}
-        movt ip, #{MATRIX_TEMPLATE >> 16}
+        movw ip, #{fa(MATRIX_TEMPLATE) & 65535}
+        movt ip, #{fa(MATRIX_TEMPLATE) >> 16}
         cmp r5, ip
-        bne abs(0x531403a8)
+        bne abs({fa(0x531403a8):#x})
         push {{r4,lr}}
-        movw r1, #{MATRIX_TEMPLATE & 65535}
-        movt r1, #{MATRIX_TEMPLATE >> 16}
+        movw r1, #{fa(MATRIX_TEMPLATE) & 65535}
+        movt r1, #{fa(MATRIX_TEMPLATE) >> 16}
         bl abs({copy_at:#x})
         str r0, [r4, #8]
         pop {{r4,pc}}
@@ -82,8 +84,8 @@ def _ma_default_source(copy_at):
     return f'''
         push {{r0-r2,r4,ip,lr}}
         mrs r4, cpsr
-        movw ip, #{MATRIX_TEMPLATE & 65535}
-        movt ip, #{MATRIX_TEMPLATE >> 16}
+        movw ip, #{fa(MATRIX_TEMPLATE) & 65535}
+        movt ip, #{fa(MATRIX_TEMPLATE) >> 16}
         cmp r3, ip
         bne D
         mov r1, r3
@@ -94,7 +96,7 @@ def _ma_default_source(copy_at):
     D:  msr cpsr_f, r4
         pop {{r0-r2,r4,ip,lr}}
         str r3, [r0, #8]
-        b abs(0x536df4dc)
+        b abs({fa(0x536df4dc):#x})
     '''
 
 
@@ -103,14 +105,14 @@ def packing(sizes):
     def search(i,cursors,chosen):
         if i==len(order):return chosen
         key=order[i];n=sizes[key]
-        for j,(lo,hi) in enumerate(CODE):
+        for j,(lo,hi) in enumerate(fa(CODE)):
             at=(cursors[j]+3)&~3
             if at+n<=hi:
                 c=list(cursors);c[j]=at+n
                 out=search(i+1,c,{**chosen,key:at})
                 if out is not None:return out
         return None
-    result=search(0,[a for a,b in CODE],{})
+    result=search(0,[a for a,b in fa(CODE)],{})
     need(result is not None,'fragmented code does not fit')
     return result
 
@@ -138,7 +140,7 @@ def _dirty_source(mask):
     D:  msr APSR_nzcvq, r3
         pop {{r0,r2,r3}}
         strb r1, [r4, #0xe]
-        b abs(0x536dd028)
+        b abs({fa(0x536dd028):#x})
     '''
 
 def _curve_gate_source(table):
@@ -164,7 +166,7 @@ def _curve_gate_source(table):
     S:  mov r3, #1
     D:  msr APSR_nzcvq, ip
         pop {{r0-r2,ip}}
-        b abs(0x536e8698)
+        b abs({fa(0x536e8698):#x})
     '''
 
 def common_source(mask):
@@ -227,23 +229,26 @@ def code_sources(mask, point, copy_at):
 def build_code(mask, assembler=None):
     """Both sizing and final placement use the same checked source specification."""
     if assembler is None:
-        assembler=lambda source,base: assemble_bundled(source,base,'GRIIIx-1.60-v29')
-    sizes={k:len(assembler(v,CODE[0][0])) for k,v in code_sources(mask,CODE[0][0],CODE[0][0]).items()}
+        assembler=lambda source,base: assemble_bundled(source,base,fwaddr.family('GRIIIx-1.60-v29'))
+    sizes={k:len(assembler(v,fa(CODE)[0][0])) for k,v in code_sources(mask,fa(CODE)[0][0],fa(CODE)[0][0]).items()}
     addresses=packing(sizes)
     code={k:assembler(v,addresses[k]) for k,v in code_sources(mask,addresses['point'],addresses['ma_copy']).items()}
     return addresses,code
 
 
 def plan_offline(raw,edits,profiles):
-    if type(raw) is not bytes or hashlib.sha256(raw).hexdigest()!=SHA:
+    if type(raw) is not bytes or hashlib.sha256(raw).hexdigest()!=fwaddr.payload_sha(SHA):
         raise FilmRequestError('held official original required')
     requests=validate_batch(edits)
+    if any(e['slot']==2 for e in requests):
+        from .film_vivid_fifth import plan_fifth
+        return plan_fifth(raw,list(requests),profiles,fwaddr.family('GRIIIx-1.60'))
     if type(profiles) is not dict:raise FilmRequestError('profiles')
     if not requests:return dict(windows=(),records=(),mask=0,code={},code_bytes=0,data_bytes=0,data_span_bytes=0,
         layout=LAYOUT,curve_kind='knots33',decoded_growth_bytes=0,data_capacity_bytes=1440,
         storage_approved=False,factory_random_path_preserved=True,
         full_image_created=False,production_integration_allowed=False,blockers=())
-    p=Payload(raw,models.layout(models.GR3X))
+    p=Payload(raw,models.layout((fwaddr.current() or models.GR3X)))
     def read(a,n):
         off=p.off(a)
         if p.off(a+n-1)!=off+n-1:raise FilmRequestError('mapping')
@@ -251,60 +256,60 @@ def plan_offline(raw,edits,profiles):
     # MIT reference make_slots16.py patch_ma: zero-table equivalence and pointer relocation.
     # Unlike the upstream comment, ZERO_SOURCE is a known ArbiterService table.
     # It is shared read-only here; not one byte of it is changed.
-    if read(DATA[0][0],1440)!=bytes(1440) or read(ZERO_SOURCE,1440)!=bytes(1440):
+    if read(fa(DATA)[0][0],1440)!=bytes(1440) or read(fa(ZERO_SOURCE),1440)!=bytes(1440):
         raise FilmRequestError('zero-table relocation identity')
-    if read(ZERO_OBJECT,32)!=struct.pack('<8I',*[DATA[0][0]]*8):
+    if read(fa(ZERO_OBJECT),32)!=struct.pack('<8I',*[fa(DATA)[0][0]]*8):
         raise FilmRequestError('zero-table pointer object')
-    first=read(MATRIX_TEMPLATE,72)
-    full=read(MATRIX_TEMPLATE,2160)
+    first=read(fa(MATRIX_TEMPLATE),72)
+    full=read(fa(MATRIX_TEMPLATE),2160)
     if full!=first[:36]+first[36:72]*59:
         raise FilmRequestError('matrix compression is not lossless')
     limits=factory_envelope_from_payload(raw)
     resolved={};knots={};errors={}
     for e in requests:
         if e['film'] not in profiles:raise FilmRequestError('所选胶片缺少参数')
-        profile=validate_profile(profiles[e['film']],e['film'],models.GR3X.id)
+        profile=validate_profile(profiles[e['film']],e['film'],(fwaddr.current() or models.GR3X).id)
         resolved[e['slot']]=profile
         knots[e['slot']],errors[e['slot']]= _numeric(profile,limits)
     mask=mask_slots([e['slot'] for e in requests])
-    for a,w in MODE_CHANGE_WORDS:
+    for a,w in fa(MODE_CHANGE_WORDS):
         if read(a,4)!=struct.pack('<I',w):raise FilmRequestError('mode cache guard')
     slots,lookup,post=data_layout()
     addresses,code=build_code(mask)
-    guards=[(0x536e8694,0xe5d4309b,_branch(0x536e8694,addresses['curve_gate'])),
-            (0x536dd024,0xe5c4100e,_branch(0x536dd024,addresses['dirty'])),
-            (0x536e4774,_branch(0x536e4774,0x536e4720,link=True),_branch(0x536e4774,addresses['post'],link=True)),
-            (0x536e87c4,_branch(0x536e87c4,0x536eedf0,link=True),_branch(0x536e87c4,addresses['getter'],link=True)),
-            (0x536e87c8,0xe51b3044,_branch(0x536e87c8,addresses['composer']))]
-    if mask&4:guards.extend(HDR_FIXES)
+    guards=[(fa(0x536e8694),0xe5d4309b,_branch(fa(0x536e8694),addresses['curve_gate'])),
+            (fa(0x536dd024),0xe5c4100e,_branch(fa(0x536dd024),addresses['dirty'])),
+            (fa(0x536e4774),_branch(fa(0x536e4774),fa(0x536e4720),link=True),_branch(fa(0x536e4774),addresses['post'],link=True)),
+            (fa(0x536e87c4),_branch(fa(0x536e87c4),fa(0x536eedf0),link=True),_branch(fa(0x536e87c4),addresses['getter'],link=True)),
+            (fa(0x536e87c8),0xe51b3044,_branch(fa(0x536e87c8),addresses['composer']))]
+    if mask&4:guards.extend(hdr_fixes())
     # Reuse the held original switch/table guards; discard all old thunks.
-    dummy=[0x53f00000]
+    dummy=[fa(0x53f00000)]
     def ignore(role,source):
         a=dummy[0];dummy[0]+=256;return a
     old,_,_=derive(read,[e['slot'] for e in requests],ignore)
-    guards.extend(row for row in old if row[0] not in ACTIVE)
+    guards.extend(row for row in old if row[0] not in fa(ACTIVE))
     # Same as GR III 2.10 (film_inplace_cache): the installed tones' own still checks
     # must stay quiet, or the original preset's adjustments reach the film. The check
     # code in 0x5325B000-0x5326B800 is byte-identical in IIIx 1.60.
     guards.extend(film_own_checks.changes(read,[e['slot'] for e in requests]))
     guards.extend([
-        (0x536df458,_branch(0x536df458,0x531403a8,link=True),_branch(0x536df458,addresses['ma_ctor'],link=True)),
-        (0x536df4d8,0xe5803008,_branch(0x536df4d8,addresses['ma_default'])),
-        (0x536df514,_branch(0x536df514,0x5313fd80,link=True),_branch(0x536df514,addresses['ma_copy'],link=True)),
+        (fa(0x536df458),_branch(fa(0x536df458),fa(0x531403a8),link=True),_branch(fa(0x536df458),addresses['ma_ctor'],link=True)),
+        (fa(0x536df4d8),0xe5803008,_branch(fa(0x536df4d8),addresses['ma_default'])),
+        (fa(0x536df514),_branch(fa(0x536df514),fa(0x5313fd80),link=True),_branch(fa(0x536df514),addresses['ma_copy'],link=True)),
     ])
-    guards.extend((ZERO_OBJECT+4*i,DATA[0][0],ZERO_SOURCE) for i in range(8))
-    for i,a in enumerate(ACTIVE):
+    guards.extend((fa(ZERO_OBJECT)+4*i,fa(DATA)[0][0],fa(ZERO_SOURCE)) for i in range(8))
+    for i,a in enumerate(fa(ACTIVE)):
         bank=i//9
         guards.extend([(a,0xe5903004,0xe92d5000),(a+4,0xe5d32044,0xe3a0c000|bank),
                        (a+8,0xe3520000,_branch(a+8,addresses['common'],link=True))])
     aliases=[i for e in requests for i in SLOT_INFO[e['slot']][1]]
-    allowed=list(CODE)+list(DATA)+[(a,a+4) for a,_,_ in guards]+[(0x55018d94+4*i,0x55018d98+4*i) for i in aliases]
+    allowed=list(fa(CODE))+list(fa(DATA))+[(a,a+4) for a,_,_ in guards]+[(fa(0x55018d94)+4*i,fa(0x55018d98)+4*i) for i in aliases]
     image=PlanImage(read,tuple(allowed),max_bytes=8192)
     for a,b,c in guards:image.guarded_word(a,b,c)
     for k,blob in code.items():image.write(addresses[k],blob)
     # Sparse lookup/post entries must be zero even when a slot is absent.
     lookup_blob=bytearray(64);post_blob=bytearray(96)
-    stock=read(0x5501900c,84);tail=_init_tail(read);records=[]
+    stock=read(fa(0x5501900c),84);tail=_init_tail(read);records=[]
     for e in requests:
         s=slots[e['slot']-8];profile=resolved[e['slot']]
         record=bytearray(stock);record[4:8]=struct.pack('<I',s['matrix']);record[68:84]=tail
@@ -314,7 +319,7 @@ def plan_offline(raw,edits,profiles):
         i=e['slot']-8
         lookup_blob[i*16:i*16+16]=struct.pack('<4I',s['record'],*s['knots'])
         post_blob[i*24:i*24+24]=csp_entry(s['record'],profile['post_matrix_q512'])
-        for alias in SLOT_INFO[e['slot']][1]:image.write(0x55018d94+4*alias,struct.pack('<I',s['record']))
+        for alias in SLOT_INFO[e['slot']][1]:image.write(fa(0x55018d94)+4*alias,struct.pack('<I',s['record']))
         records.append({**s,'film':e['film']})
     image.write(lookup,bytes(lookup_blob));image.write(post,bytes(post_blob))
     return dict(windows=image.seal(),records=tuple(records),mask=mask,code=addresses,

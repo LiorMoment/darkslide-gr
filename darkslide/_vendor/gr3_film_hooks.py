@@ -1,15 +1,17 @@
 """Selected MIT curve-switch and post-matrix hooks from gr3-film-mods.
 Copyright (c) 2026 idontknownihil. See GR3_FILM_MODS_LICENSE.txt.
 Local selection and runtime-check modification by LiorMoment, 2026-10-13.
+Firmware addresses relocate through fwaddr.A for GR III 2.20 / IIIx 1.70 (LiorMoment, 2026-10-26).
 """
 import struct
+from ..fwaddr import A as fa
 CURVE_LIB = 0x55037604
 CSP_CALC = 0x536E4720
 
 def fill_src(sets, selectors, ret):
     """sets: SETS address; selectors: [(tone, sel)]; ret: the function's epilogue word (stock 0x536DD464).
     r1 = tone, r3 = ShootingInfo base (ldr at 0x536DD450)."""
-    lib6 = CURVE_LIB + 24
+    lib6 = fa(CURVE_LIB) + 24
     sel = '\n'.join(f'cmp r1, #{t}\nmoveq r2, #{s}' for t, s in selectors)
     return f'''
         movw r0, #{sets & 0xFFFF:#x}
@@ -32,7 +34,7 @@ def fill_src(sets, selectors, ret):
 def csp_src(table):
     return f'''
         push {{r0, r1, r4, r5, r6, r7, r8, lr}}
-        bl abs({CSP_CALC:#x})
+        bl abs({fa(CSP_CALC):#x})
         ldr r0, [sp]               @ YCbCrMatrix object: 9 coefficients
         ldr r1, [sp, #4]
         ldr r3, [r1, #8]           @ look record

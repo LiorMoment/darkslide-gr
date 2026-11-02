@@ -521,7 +521,11 @@ class Store:
                 if "film" in icon and (icon.get("style") != "image" or icon["film"] not in
                                        {f["id"] for f in film_luts.catalog()["films"]}):
                     raise StoreError("%s 的图标格式错误" % slot["name"])
-                keep = ("asset", "source", "style", "crop", "text", "film")
+                # fallback: the film's name plate standing in for the user's icon that could not be read
+                # then; the page puts the user's icon back once it loads
+                if "fallback" in icon and (icon["fallback"] is not True or "film" not in icon):
+                    raise StoreError("%s 的图标格式错误" % slot["name"])
+                keep = ("asset", "source", "style", "crop", "text", "film", "fallback")
                 out["icon"] = {k: icon[k] for k in keep if k in icon}
             if "grain" in edit:
                 if tpl.grain_stage(template, no) != "menu":
@@ -668,24 +672,33 @@ class Store:
                                 sha256=digest_of(data), imported_at=now(), profile=None, fit=None)
         if bake is not None and index[ident].get("bake") != bake:
             index[ident]["bake"] = bake
-            if models.for_project(self.get_project(project_id)) == models.GR3X:
+            if models.is_iiix(models.for_project(self.get_project(project_id))):
                 # Identical cube bytes can come from different films/grades.
                 # A failed re-fit must not label an old profile as the new source.
                 index[ident].update(profile=None, fit=None)
         write_json(path / "film_luts.json", index)
-        return self._lut_summary(ident, index[ident])
+        return self._lut_summary(ident, index[ident], self._lut_model(project_id))
+
+    def _lut_model(self, project_id):
+        """The project's model, for checking a 调色 fit against the firmware it was made for; None when the
+        project names no built-in firmware (a 调色 fit is then checked as before, against GR IIIx 1.60)."""
+        try:
+            return models.for_project(self.get_project(project_id))
+        except ValueError:
+            return None
 
     def list_film_luts(self, project_id):
-        return [self._lut_summary(k, v) for k, v in sorted(self.film_luts(project_id).items(),
+        model = self._lut_model(project_id)
+        return [self._lut_summary(k, v, model) for k, v in sorted(self.film_luts(project_id).items(),
                                                             key=lambda kv: kv[1].get("imported_at") or "")]
 
     @staticmethod
-    def _lut_summary(ident, entry):
+    def _lut_summary(ident, entry, model=None):
         fitted = entry.get('profile') is not None
         reason = None
         if fitted and entry['profile'].get('model') == models.GR3X.name and entry.get('bake') is not None:
             from .gr3x_recipe_lineage import verify
-            try:verify(entry['profile'], entry['bake'])
+            try:verify(entry['profile'], entry['bake'], model if models.is_iiix(model) else models.GR3X)
             except ValueError as error:fitted, reason = False, str(error)
         return dict(id=ident, name=entry["name"], size=entry["size"], sha256=entry["sha256"],
                     imported_at=entry["imported_at"], fitted=fitted,
@@ -701,7 +714,7 @@ class Store:
         index[ident].update(profile=profile, fit=report)
         index[ident].pop("check", None)
         write_json(path / "film_luts.json", index)
-        return self._lut_summary(ident, index[ident])
+        return self._lut_summary(ident, index[ident], self._lut_model(project_id))
 
     def set_film_lut_check(self, project_id, ident, check):
         """Remember that this LUT was checked and cannot go into the camera (nothing fitted is kept)."""
@@ -751,18 +764,18 @@ class Store:
         want = self.grade_key(film, grade)
         for ident, entry in self.film_luts(project_id).items():
             bake = entry.get("bake")
-            if bake and self._lut_summary(ident, entry)['fitted'] and self.grade_key(bake.get("film"), bake.get("grade")) == want:
+            if bake and self._lut_summary(ident, entry, self._lut_model(project_id))['fitted'] and self.grade_key(bake.get("film"), bake.get("grade")) == want:
                 return ident
         return None
 
     def film_changes_for_generate(self, project_id, changes):
-        """Changes with each 8-11 preset that has a 调色 pointed at its fitted bake.
+        """Point each replaceable preset's 调色 at its fitted bake.
         Raises when a 调色 on those presets has not been fitted for its current values."""
         out = dict(changes)
         for key, edit in changes.items():
             if key == "shutdown" or not isinstance(edit, dict) or not edit.get("grade"):
                 continue
-            if key not in ("8", "9", "10", "11"):
+            if key not in film_requests.SUPPORTED_KEYS:
                 continue
             ident = self.bake_for(project_id, edit.get("film"), edit["grade"])
             if ident is None:
@@ -809,10 +822,10 @@ class Store:
                         provenance.get('source_sha256') != sha or
                         provenance.get('official_sha256') != project_sha or
                         project_sha != model.input_sha or
-                        provenance.get('fitter') != ('darkslide-film-fit-v2-iiix-knots33' if model == models.GR3X else 'darkslide-film-fit-v2') or
+                        provenance.get('fitter') != ('darkslide-film-fit-v2-iiix-knots33' if models.is_iiix(model) else 'darkslide-film-fit-v2') or
                         report.get('fitter') != provenance.get('fitter') or
                         report.get('base_model_id') != provenance.get('base_model_id') or
-                        provenance.get('base_model_id') not in (('gr3x-160-upstream-neutral-stubbed-v2',) if model == models.GR3X else (
+                        provenance.get('base_model_id') not in (('gr3x-160-upstream-neutral-stubbed-v2',) if models.is_iiix(model) else (
                             'gr3-210-upstream-neutral-stubbed-v2', 'gr3-210-python-standard-p64-zero-v1')) or
                         report.get('layout') != 'four_curve_v1' or
                         provenance.get('target_input_encoding') != 'srgb' or
@@ -820,9 +833,9 @@ class Store:
                         not re.fullmatch(r'[0-9a-f]{64}', str(provenance.get('base_values_sha256', '')))):
                     raise ValueError('来源字段不匹配')
                 film_luts.parse_cube(cube)
-                if model == models.GR3X and entry.get('bake') is not None:
+                if models.is_iiix(model) and entry.get('bake') is not None:
                     from .gr3x_recipe_lineage import verify
-                    verify(profile, entry['bake'])
+                    verify(profile, entry['bake'], model)
                 json.dumps(entry, allow_nan=False)
             except (ValueError, OSError, TypeError, KeyError) as exc:
                 raise StoreError('LUT 来源或拟合记录核对失败：' + str(exc)) from exc

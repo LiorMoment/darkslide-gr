@@ -6,6 +6,7 @@ from fractions import Fraction
 from .film_requests import FilmRequestError
 from ._vendor.gr3_film_hooks import csp_src
 from ._vendor.gr3_four_curve_hooks import composer_source
+from .fwaddr import A as fa
 MODE_CHANGE_WORDS=((0x536DCB64,0xE51B2034),(0x536DCB6C,0xE5D431A8),(0x536DCB74,0xE0533002),(0x536DCB7C,0x13A03001),(0x536DCB80,0xE50B30CC),(0x536DCDFC,0xE5C421A8))
 def expand_knots(knots):
     if type(knots) not in (tuple, list) or len(knots) != 33 or any(type(v) is not int or not 0 <= v <= 16383 for v in knots):
@@ -95,7 +96,7 @@ def _getter_source(table):
         mov r1, r4
         mov r2, r5
         mov r3, r6
-        bl abs(0x536eedf0)
+        bl abs({fa(0x536eedf0):#x})
         pop {{r4,r5,r6,r7,r8,pc}}
     S:  ldr r3, [r2]
         str r3, [r4]

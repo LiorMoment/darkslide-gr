@@ -10,6 +10,8 @@ from pathlib import Path
 import struct
 import threading
 from . import fwread, models
+from .fwaddr import A as fa
+from . import fwaddr
 
 MODEL_ID = 'gr3x-160-stored-look-and-curve-bounds-v1'
 _INPUT_BYTES = 30391788
@@ -25,8 +27,8 @@ class FactoryEnvelopeError(ValueError):
 
 def factory_envelope_from_payload(payload):
     """Read scalar bounds from the same immutable official planning input."""
-    _need(type(payload) is bytes and len(payload) == 59718388 and
-          hashlib.sha256(payload).hexdigest() == models.GR3X.payload_sha,
+    _need(type(payload) is bytes and len(payload) == (fwaddr.current() or models.GR3X).payload_size and
+          hashlib.sha256(payload).hexdigest() == (fwaddr.current() or models.GR3X).payload_sha,
           '需要官方 GR IIIx 1.60 原件')
     return _statistics(payload)
 
@@ -38,7 +40,7 @@ def _need(value, message):
 
 def _statistics(payload):
     """Runtime private reader; local arrays never escape this function."""
-    source = fwread.Payload(payload, models.layout(models.GR3X))
+    source = fwread.Payload(payload, models.layout((fwaddr.current() or models.GR3X)))
 
     def read(address, size):
         first, last = source.off(address), source.off(address + size - 1)
@@ -48,18 +50,18 @@ def _statistics(payload):
 
     # Current 2.10 native tones11..21, effect records22..24, negative25.
     # Older records0..10 and custom menu IDs are not current native tone IDs.
-    records = struct.unpack('<15I', read(_PRIMARY + 11 * 4, 15 * 4))
+    records = struct.unpack('<15I', read(fa(_PRIMARY) + 11 * 4, 15 * 4))
     matrices = []
     for record in records:
-        _need(record % 4 == 0 and 0x55018D94 <= record <= 0x55019828 - 84,
+        _need(record % 4 == 0 and fa(0x55018D94) <= record <= fa(0x55019828) - 84,
               '原厂预设记录位置不匹配')
         matrix = struct.unpack('<I', read(record + 4, 4))[0]
-        _need(matrix % 2 == 0 and 0x53000000 <= matrix <= 0x540B55C0 - 18,
+        _need(matrix % 2 == 0 and fa(0x53000000) <= matrix <= fa(0x540B55C0) - 18,
               '原厂前矩阵位置不匹配')
         matrices.append(struct.unpack('<9h', read(matrix, 18)))
-    pointers = struct.unpack('<12I', read(_LIBRARY, 48))
+    pointers = struct.unpack('<12I', read(fa(_LIBRARY), 48))
     _need(len(set(pointers)) == 12 and all(a % 4 == 0 and
-          0x53EF0000 <= a <= 0x53F00000 - 512 for a in pointers),
+          fa(0x53EF0000) <= a <= fa(0x53F00000) - 512 for a in pointers),
           '原厂曲线表位置不匹配')
     ordered = sorted(pointers)
     _need(all(b - a >= 512 for a, b in zip(ordered, ordered[1:])),
@@ -79,8 +81,8 @@ def _statistics(payload):
         curve_first_max=max(curve[0] for curve in curves),
         curve_last_min=min(curve[-1] for curve in curves),
         curve_last_max=max(curve[-1] for curve in curves),
-        schema=1, model='GR IIIx', firmware='1.60', model_id=MODEL_ID,
-        payload_sha256=models.GR3X.payload_sha,
+        schema=1, model='GR IIIx', firmware=(fwaddr.current() or models.GR3X).firmware, model_id=MODEL_ID,
+        payload_sha256=(fwaddr.current() or models.GR3X).payload_sha,
         provenance=dict(
             look=dict(source='factory stored Q13 look matrices',
                       primary_indices=[11, 25], records=15),
@@ -100,18 +102,20 @@ def factory_envelope(official_bin_path):
     """Return defensive copies of scalar statistics, cached by original SHA."""
     try:
         path = Path(official_bin_path)
-        _need(path.stat().st_size == _INPUT_BYTES, '需要官方 GR IIIx 1.60 原件')
+        _need(path.stat().st_size in (_INPUT_BYTES, models.GR3X_170.input_size), '需要官方 GR IIIx 1.60 / 1.70 原件')
         raw = path.read_bytes()
     except (OSError, TypeError) as error:
         raise FactoryEnvelopeError('无法读取用户官方原件') from error
     sha = hashlib.sha256(raw).hexdigest()
-    _need(sha == models.GR3X.input_sha, '需要官方 GR IIIx 1.60 原件')
-    key = (sha, models.GR3X.payload_sha, MODEL_ID)
+    _need(sha in (models.GR3X.input_sha, models.GR3X_170.input_sha), '需要官方 GR IIIx 1.60 / 1.70 原件')
+    model = models.from_sha(sha)
+    key = (sha, model.payload_sha, MODEL_ID)
     with _LOCK:
         if key in _CACHE:
             return copy.deepcopy(_CACHE[key])
         try:
-            result = _statistics(fwread.unpack(raw))
+            with fwaddr.firmware(model):
+                result = _statistics(fwread.unpack(raw))
         except (ValueError, struct.error) as error:
             raise FactoryEnvelopeError('原厂数值范围读取失败：' + str(error)) from error
         result['official_sha256'] = sha

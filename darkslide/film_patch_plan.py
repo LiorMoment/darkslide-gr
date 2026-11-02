@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import struct
 from .film_arm_assemble import assemble
 from ._vendor.gr3_film_hooks import fill_src,csp_src,csp_entry
+from .fwaddr import A as fa
 
 @dataclass(frozen=True)
 class Window:
@@ -56,7 +57,8 @@ class PlanImage:
 def from_official_payload(raw,allowed):
     from .fwread import Payload
     if type(raw) is not bytes:raise ValueError("immutable original payload required")
-    payload=Payload(raw)
+    from . import fwaddr
+    payload=Payload(raw,fwaddr.layout()) if fwaddr.is_220() else Payload(raw)
     def read(address,n):
         begin=payload.off(address);last=payload.off(address+n-1)
         if last-begin!=n-1:raise ValueError("source crosses mapped segments")
@@ -84,7 +86,7 @@ def plan_four_mode_hooks(image,post_by_record):
         raise ValueError("one to four record post matrices required")
     entries=[]
     for key,matrix in post_by_record.items():
-        if type(key) is not int or key not in TARGET_RECORDS or type(matrix) is not list or len(matrix)!=3:
+        if type(key) is not int or key not in fa(TARGET_RECORDS) or type(matrix) is not list or len(matrix)!=3:
             raise ValueError("aligned record and matrix required")
         for row in matrix:
             if type(row) is not list or len(row)!=3 or any(type(x) is not int or not -32768<=x<=32767 for x in row) or sum(row)!=512:
@@ -92,26 +94,26 @@ def plan_four_mode_hooks(image,post_by_record):
         entries.append(csp_entry(key,matrix))
     # Four full 256-point groups: existing library0..2 HDR,3..5 Cross,6..8 Retro,9..11 Bleach.
     # No 33-knot conversion or getter replacement is used.
-    library=[image.word(LIB+4*i) for i in range(12)]
+    library=[image.word(fa(LIB)+4*i) for i in range(12)]
     if any(p>>16!=0x53ef or p%2 for p in library):raise ValueError("unexpected original curve pointers")
-    ret=image.word(0x536dd464)
+    ret=image.word(fa(0x536dd464))
     if ret!=0xe89daff8:raise ValueError("fill return mismatch")
-    stub=assemble(csp_src(0),B);table_at=B+len(stub)
+    stub=assemble(csp_src(0),fa(B));table_at=fa(B)+len(stub)
     table=b"".join(entries)+csp_entry(0,[[512,0,0],[0,512,0],[0,0,512]])
-    if table_at+len(table)>B_END:raise ValueError("post code/table capacity")
-    post=assemble(csp_src(table_at),B)
-    fill=assemble(fill_src(SETS,SELECTORS,ret),A)
-    if len(fill)>A_END-A:raise ValueError("curve-switch capacity")
+    if table_at+len(table)>fa(B_END):raise ValueError("post code/table capacity")
+    post=assemble(csp_src(table_at),fa(B))
+    fill=assemble(fill_src(fa(SETS),SELECTORS,ret),fa(A))
+    if len(fill)>fa(A_END)-fa(A):raise ValueError("curve-switch capacity")
     sets=[library[6:12],library[0:3]+library[9:12],library[6:12]]
     guards=[
-        (0x536ef618,0xeddf0be0,_branch(0x536ef618,0x536ef6dc)),
-        (0x536dd450,0x159632d0,0xe59632d0),
-        (0x536dd454,_branch(0x536dd454,SETS,condition=0),_branch(0x536dd454,A)),
-        (0x536e4774,_branch(0x536e4774,0x536e4720,link=True),_branch(0x536e4774,B,link=True))]
+        (fa(0x536ef618),0xeddf0be0,_branch(fa(0x536ef618),fa(0x536ef6dc))),
+        (fa(0x536dd450),0x159632d0,0xe59632d0),
+        (fa(0x536dd454),_branch(fa(0x536dd454),fa(SETS),condition=0),_branch(fa(0x536dd454),fa(A))),
+        (fa(0x536e4774),_branch(fa(0x536e4774),fa(0x536e4720),link=True),_branch(fa(0x536e4774),fa(B),link=True))]
     for address,expected,replacement in guards:
         if image.word(address)!=expected:raise ValueError("original word mismatch")
-    writes=[(B,post),(table_at,table),(A,fill),
-            (SETS,struct.pack("<18I",*[p for group in sets for p in group]))]
+    writes=[(fa(B),post),(table_at,table),(fa(A),fill),
+            (fa(SETS),struct.pack("<18I",*[p for group in sets for p in group]))]
     writes += [(address,struct.pack("<I",replacement)) for address,expected,replacement in guards]
     # Preflight every write and source read before publishing any partial result.
     if sum(len(data) for address,data in writes)>image.limit:

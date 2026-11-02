@@ -8,11 +8,12 @@ from .film_requests import FilmRequestError,validate_batch
 from .film_profiles import validate_profile
 from .film_patch_plan import PlanImage,from_official_payload,_branch
 from .film_four_validation import fit_knots,ORIGINAL_BYTES,ORIGINAL_SHA
-from .film_writer import _init_tail,SLOT_INFO,HDR_FIXES
+from .film_writer import _init_tail,SLOT_INFO,HDR_FIXES,hdr_fixes
 from .film_standard_proxy import derive as proxy_derive,mask_slots
 from .film_arm_assemble import assemble
 from ._vendor.gr3_four_curve_hooks import point_source,composer_source
 from ._vendor.gr3_film_hooks import csp_src,csp_entry
+from .fwaddr import A as fa
 
 LAYOUT='standard_sliders_v1'
 ARENA,END=0x53D36400,0x53D37400
@@ -37,9 +38,9 @@ MODE_CHANGE_WORDS=((0x536DCB64,0xE51B2034),(0x536DCB6C,0xE5D431A8),
 
 def slot_layout(slot):
     if type(slot) is not int or slot not in SLOT_INFO:raise FilmRequestError('胶片位置无效')
-    base=SLOT_BASE+(slot-8)*STRIDE
+    base=fa(SLOT_BASE)+(slot-8)*STRIDE
     return dict(slot=slot,record=base,matrix=base+84,knots=(base+104,base+172,base+240),
-                post_entry=POST_TABLE+(slot-8)*24,lookup_entry=LOOKUP+(slot-8)*16)
+                post_entry=fa(POST_TABLE)+(slot-8)*24,lookup_entry=fa(LOOKUP)+(slot-8)*16)
 
 def _fill_source(mask):
     return f'''
@@ -62,8 +63,8 @@ def _fill_source(mask):
     D:  msr APSR_nzcvq, r12
         pop {{r0,r2,r12,lr}}
         .word 0x159632d0
-        beq abs(0x536dd4b8)
-        b abs(0x536dd458)
+        beq abs({fa(0x536dd4b8):#x})
+        b abs({fa(0x536dd458):#x})
     '''
 
 def _dirty_source(mask):
@@ -87,7 +88,7 @@ def _dirty_source(mask):
     D:  msr APSR_nzcvq, r3
         pop {{r0,r2,r3}}
         strb r1, [r4, #0xe]
-        b abs(0x536dd028)
+        b abs({fa(0x536dd028):#x})
     '''
 
 def _getter_source(table):
@@ -113,7 +114,7 @@ def _getter_source(table):
         mov r1, r4
         mov r2, r5
         mov r3, r6
-        bl abs(0x536eedf0)
+        bl abs({fa(0x536eedf0):#x})
         pop {{r4,r5,r6,r7,r8,pc}}
     S:  ldr r3, [r2]
         str r3, [r4]
@@ -180,6 +181,7 @@ class _Source:
 
 def plan(read,edits,profiles):
     requests=validate_batch(edits)
+    if any(e['slot']==2 for e in requests):raise FilmRequestError('Vivid requires the five-film layout')
     if not requests:return dict(windows=(),selected_slots=(),records=[],layout=LAYOUT,full_image_created=False)
     if type(profiles) is not dict:raise FilmRequestError('需要胶片拟合参数')
     resolved={}
@@ -187,47 +189,47 @@ def plan(read,edits,profiles):
         if e['film'] not in profiles:raise FilmRequestError('所选胶片缺少参数')
         resolved[e['slot']]=validate_profile(profiles[e['film']],e['film'])
     source=_Source(read);read=source.read
-    if any(read(ARENA,4096)):raise FilmRequestError('只读胶片区不匹配官方空白，拒绝覆盖')
-    for at,word in LANDING_REFS:
+    if any(read(fa(ARENA),4096)):raise FilmRequestError('只读胶片区不匹配官方空白，拒绝覆盖')
+    for at,word in fa(LANDING_REFS):
         if read(at,4)!=struct.pack('<I',word):raise FilmRequestError('只读区已知引用不匹配')
-    for at,word in MODE_CHANGE_WORDS:
+    for at,word in fa(MODE_CHANGE_WORDS):
         if read(at,4)!=struct.pack('<I',word):raise FilmRequestError('原厂模式切换缓存合同不匹配')
-    stock=read(STANDARD,84);tail=_init_tail(read)
-    if int.from_bytes(read(0x536DD464,4),'little')!=0xE89DAFF8:raise FilmRequestError('原厂fill返回不匹配')
-    mask=mask_slots([e['slot'] for e in requests]);code=[];cursor=ARENA
+    stock=read(fa(STANDARD),84);tail=_init_tail(read)
+    if int.from_bytes(read(fa(0x536DD464),4),'little')!=0xE89DAFF8:raise FilmRequestError('原厂fill返回不匹配')
+    mask=mask_slots([e['slot'] for e in requests]);code=[];cursor=fa(ARENA)
     def allocate(role,src):
         nonlocal cursor
         at=cursor
         while True:
             blob=assemble(src,at)
-            overlaps=[a for a in LANDINGS if at<a+4 and a<at+len(blob)]
+            overlaps=[a for a in fa(LANDINGS) if at<a+4 and a<at+len(blob)]
             if not overlaps:break
             at=max(overlaps)+4
         cursor=at+len(blob)
-        if cursor>CODE_END:raise FilmRequestError('选择性胶片代码超出只读区')
+        if cursor>fa(CODE_END):raise FilmRequestError('选择性胶片代码超出只读区')
         code.append(dict(role=role,address=at,code=blob));return at
     for name,src in (('fill',_fill_source(mask)),('dirty',_dirty_source(mask)),('point',point_source()),
-                     ('getter',_getter_source(LOOKUP)),('post',_post_source(POST_TABLE))):
+                     ('getter',_getter_source(fa(LOOKUP))),('post',_post_source(fa(POST_TABLE)))):
         allocate(name,src)
     point=next(r['address'] for r in code if r['role']=='point')
-    allocate('composer',_composer_source(LOOKUP,point))
+    allocate('composer',_composer_source(fa(LOOKUP),point))
     addresses={r['role']:r['address'] for r in code}
-    guards=[(0x536DD450,0x159632D0,_branch(0x536DD450,addresses['fill'])),
-            (0x536DD024,0xE5C4100E,_branch(0x536DD024,addresses['dirty'])),
-            (0x536E4774,_branch(0x536E4774,0x536E4720,link=True),_branch(0x536E4774,addresses['post'],link=True)),
-            (0x536E87C4,_branch(0x536E87C4,0x536EEDF0,link=True),_branch(0x536E87C4,addresses['getter'],link=True)),
-            (0x536E87C8,0xE51B3044,_branch(0x536E87C8,addresses['composer']))]
+    guards=[(fa(0x536DD450),0x159632D0,_branch(fa(0x536DD450),addresses['fill'])),
+            (fa(0x536DD024),0xE5C4100E,_branch(fa(0x536DD024),addresses['dirty'])),
+            (fa(0x536E4774),_branch(fa(0x536E4774),fa(0x536E4720),link=True),_branch(fa(0x536E4774),addresses['post'],link=True)),
+            (fa(0x536E87C4),_branch(fa(0x536E87C4),fa(0x536EEDF0),link=True),_branch(fa(0x536E87C4),addresses['getter'],link=True)),
+            (fa(0x536E87C8),0xE51B3044,_branch(fa(0x536E87C8),addresses['composer']))]
     # Outside the parameter pass-through, HDR still has a native multi-frame
     # trigger. The selected HDR fixes stay conditional. Retro pass-through is
     # already bypassed by the selected Standard case, so its patch is omitted.
-    if mask&4:guards+=list(HDR_FIXES)
+    if mask&4:guards+=list(hdr_fixes())
     proxy_words,proxy_codes,proxy_meta=proxy_derive(read,[e['slot'] for e in requests],allocate)
     guards+=list(proxy_words)
-    for at in LANDINGS:
-        code.append(dict(role='landing_guard',address=at,code=struct.pack('<I',_branch(at,END))))
-    allowed=[(ARENA,END)]+[(a,a+4) for a,_,_ in guards]+[(a,a+len(b)) for a,b in proxy_codes]
+    for at in fa(LANDINGS):
+        code.append(dict(role='landing_guard',address=at,code=struct.pack('<I',_branch(at,fa(END)))))
+    allowed=[(fa(ARENA),fa(END))]+[(a,a+4) for a,_,_ in guards]+[(a,a+len(b)) for a,b in proxy_codes]
     selected_aliases=[i for e in requests for i in SLOT_INFO[e['slot']][1]]
-    allowed.extend((PRIMARY+4*i,PRIMARY+4*i+4) for i in selected_aliases)
+    allowed.extend((fa(PRIMARY)+4*i,fa(PRIMARY)+4*i+4) for i in selected_aliases)
     image=PlanImage(read,tuple(allowed),max_bytes=8192)
     for a,old,new in guards:image.guarded_word(a,old,new)
     for row in code:image.write(row['address'],row['code'])
@@ -242,13 +244,13 @@ def plan(read,edits,profiles):
             knots,error=fit_knots(curve);image.write(at,struct.pack('<33H',*knots));channel_errors.append(error)
         image.write(r['lookup_entry'],struct.pack('<4I',r['record'],*r['knots']))
         image.write(r['post_entry'],csp_entry(r['record'],p['post_matrix_q512']))
-        for i in SLOT_INFO[e['slot']][1]:image.write(PRIMARY+4*i,struct.pack('<I',r['record']))
+        for i in SLOT_INFO[e['slot']][1]:image.write(fa(PRIMARY)+4*i,struct.pack('<I',r['record']))
         records.append(dict(r,film=e['film'],aliases=SLOT_INFO[e['slot']][1]));errors.append(dict(slot=e['slot'],channels=channel_errors))
     windows=image.seal();source.stable()
     return dict(layout=LAYOUT,windows=windows,selected_slots=tuple(e['slot'] for e in requests),installed_mask=mask,
                 records=records,compression_errors=errors,code_regions=tuple(dict(role=r['role'],address=r['address'],size=len(r['code'])) for r in code),
-                code_bytes=sum(len(r['code']) for r in code),code_span=cursor-ARENA,
-                landing_guards=LANDINGS,arena_used=POST_TABLE+96-ARENA,proxy=proxy_meta,
+                code_bytes=sum(len(r['code']) for r in code),code_span=cursor-fa(ARENA),
+                landing_guards=fa(LANDINGS),arena_used=fa(POST_TABLE)+96-fa(ARENA),proxy=proxy_meta,
                 factory_library_unchanged=True,factory_random_code_unchanged=True,expanded_scratch_bytes=0,
                 source_regions=tuple((a,n) for a,n in source.regions),full_image_created=False,device_verified=False,
                 storage_liveness_verified=False,runtime_mapping_verified=False,same_gamma_concurrent_calls_verified=False)
@@ -257,6 +259,7 @@ def plan_official_payload(raw,edits,profiles):
     if type(raw) is not bytes or len(raw)!=ORIGINAL_BYTES or hashlib.sha256(raw).hexdigest()!=ORIGINAL_SHA:
         raise FilmRequestError('方案C只接受官方GR III 2.10原件')
     requests=validate_batch(edits)
+    if any(e['slot']==2 for e in requests):raise FilmRequestError('Vivid requires the five-film layout')
     if not requests:return plan(None,[],{})
     # One defensive snapshot serves the numeric gate and the actual plan.
     if type(profiles) is not dict:raise FilmRequestError('需要胶片拟合参数')

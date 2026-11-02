@@ -114,7 +114,8 @@ class App:
         """A factory shutdown image from the imported official input, read-only, cached. request is the
         shutdown route (2 normal GoodBye, 3 Street Collabo, 10 ING, 11 Urban, 12 Diary): each edition
         shows its own picture, found through the firmware's own request table."""
-        if request not in shutdown_verify.SHARED_REQUESTS:
+        # 2.20 / 1.70 add the 20th / 30th-anniversary routes 13 and 14.
+        if request not in shutdown_verify.SHARED_REQUESTS + (13, 14):
             raise ApiError(404, "没有这个关机画面")
         target = self.store.factory_dir(digest) / ("shutdown.jpg" if request == 2 else "shutdown_%d.jpg" % request)
         if not target.exists():
@@ -122,8 +123,11 @@ class App:
                 raise ApiError(404, "没有导入这个固件")
             payload = fwread.unpack(self.store.input_path(digest).read_bytes())
             try:
-                p = fwread.Payload(bytes(payload), pinned=False)
-                at = p.off(p.u32(p.u32(shutdown_verify._table_va(request)) + 4))
+                model = models.from_sha(digest)
+                if request > 12 and not models.is_220(model):
+                    raise ValueError("route only on 2.20 / 1.70")
+                p = fwread.Payload(bytes(payload), models.layout(model), pinned=False)
+                at = p.off(p.u32(p.u32(0x55002B78 + 4 * request) + 4))   # request table (RAM), then descriptor path
                 path = bytes(payload[at:at + 64]).split(b"\0")[0]
             except (fwread.FirmwareReadError, ValueError, IndexError, struct.error):
                 path = b""
@@ -174,7 +178,7 @@ SAFETY_HEADERS = (
     ("Cache-Control", "no-store"),
 )
 PREF_KEYS = ("preflight_seen", "guide_off", "guide_start_seen", "guide_work_seen",
-             "guide_v1_news_seen", "guide_v2_news_seen", "guide_v3_news_seen", "guide_tour_seen", "guide_editor_seen")
+             "guide_v1_news_seen", "guide_v2_news_seen", "guide_v3_news_seen", "guide_v4_news_seen", "guide_tour_seen", "guide_editor_seen")
 # Seconds a single socket read or write may wait before the connection is dropped.
 IDLE_TIMEOUT = 30
 # A declared request body that the route never read (403, 404, 405, 413 ...) is
@@ -396,13 +400,56 @@ def api_factory_icon(req, digest, n):
 
 def api_build_firmware(req, bid):
     from .legacy_import import checked_build
+    from . import camera_features
     path = req.store.build_path(bid,'manifest.json')
     manifest = json.loads(path.read_text(encoding='utf-8'))
+    # A saved build can predate the generation gate. Do not treat missing or
+    # unrecognized metadata as evidence that the held features are absent.
+    features = manifest.get('features') if type(manifest) is dict else None
+    known = {'icon', 'name', 'grain_menu', 'menu_order', 'soft_glow', 'wide_ratio',
+             'date_stamp', 'film', 'shutdown', 'photo_recipe'}
+    if (type(features) is not list or not features or any(type(x) is not str or x not in known for x in features)):
+        raise ApiError(422, '保存的构建缺少可识别的功能清单，暂时不能下载固件')
+    if any(x in camera_features.UNVERIFIED for x in features):
+        raise ApiError(422, '保存的构建包含尚未完成更新和恢复验证的功能，暂时不能下载固件')
+    # Older date-enabled builds recorded only the combined edit's kind,
+    # wide_ratio.  Such records cannot distinguish wide-only from date-on.
+    if 'wide_ratio' in features:
+        policy = manifest.get('download_policy')
+        if (type(policy) is not dict or set(policy) != {'schema', 'date_stamp', 'output_sha256'} or
+                type(policy['schema']) is not int or policy['schema'] != 1 or
+                policy['date_stamp'] is not False or policy['output_sha256'] != manifest.get('output_sha256')):
+            raise ApiError(422, '保存的构建缺少可识别的功能清单，暂时不能下载固件')
     model, output = checked_build(path.parent,manifest)
     data = output.read_bytes()
     if hashlib.sha256(data).hexdigest() != manifest["output_sha256"]:
         raise ApiError(409, "下载期间历史构建已改变")
     return Reply(data,content_type=BINARY_TYPE,headers=[disposition(model.filename)])
+
+
+def _save_generated_build(store, output, manifest, project):
+    """Mark new wide builds only after checking the saved feature selection.
+
+    This marker is local provenance, not a signature or a camera safety claim.
+    Historical wide builds lack it and must be regenerated before downloading.
+    """
+    from . import camera_features
+    try:
+        selected = camera_features.clean(project.get('camera_features'))
+    except camera_features.FeatureError as exc:
+        raise ApiError(422, str(exc))
+    pending = camera_features.refusal(selected)
+    if pending:
+        raise ApiError(422, pending)
+    features = manifest.get('features')
+    if type(features) is not list:
+        raise ApiError(422, '保存的构建缺少可识别的功能清单，暂时不能下载固件')
+    if bool(selected.get('wide_ratio')) != ('wide_ratio' in features):
+        raise ApiError(422, '保存的构建缺少可识别的功能清单，暂时不能下载固件')
+    manifest = dict(manifest)
+    if 'wide_ratio' in features:
+        manifest['download_policy'] = dict(schema=1, date_stamp=False, output_sha256=manifest.get('output_sha256'))
+    return store.put_build(output, manifest)
 
 
 def api_build_manifest(req, bid):
@@ -472,10 +519,12 @@ def api_generate(req, pid):
     app, store = req.app, req.store
     if (film_requests.needs_closed_output(store.get_project(pid).get("changes") or {}) and
             inplace_generation.production_available() is not True):
-        raise ApiError(422, "胶片或四位置调色的完整输出尚未开放，请使用只读核对")
+        raise ApiError(422, "胶片或可替换位置调色的完整输出尚未开放，请使用只读核对")
     project, model, template = project_context(req, pid)
     if not models.capabilities(model)['full_firmware']:
         raise ApiError(422, "IIIx 完整固件生成尚未接入此入口，请使用只读核对")
+    if model not in (models.GR3, models.GR3_220) and film_requests.needs_closed_output(project.get("changes") or {}):
+        raise ApiError(422, "胶片还没有适配 %s %s，请先去掉胶片再生成" % (model.name, model.firmware))
     if not template.get("reviewed"):
         raise ApiError(409, "模板不可用，不能生成")
     context_project = copy.deepcopy(project)
@@ -484,7 +533,7 @@ def api_generate(req, pid):
         raise ApiError(409, "工程在准备生成期间改变，请重新操作")
     needs_inplace = film_requests.needs_closed_output(project.get("changes") or {})
     if needs_inplace and inplace_generation.production_available() is not True:
-        raise ApiError(422, "胶片或四位置调色的完整输出尚未开放，请使用只读核对")
+        raise ApiError(422, "胶片或可替换位置调色的完整输出尚未开放，请使用只读核对")
     source = store.input_path(project["input_sha256"])
     if not source.exists():
         raise ApiError(409, "找不到官方原件，请重新导入")
@@ -495,9 +544,9 @@ def api_generate(req, pid):
             output, manifest = generate.run_inplace(store, project, template, source.read_bytes())
         except generate.GenerateError as exc:
             return Reply({"error": str(exc), "checks": exc.checks}, 422)
-        return store.put_build(output, manifest)
+        return _save_generated_build(store, output, manifest, project)
     if film_requests.available():
-        # A 调色 on presets 8-11 is written as the LUT fitted from it (film + adjustments).
+        # A replaceable preset's 调色 uses the LUT fitted from it (film + adjustments).
         project = dict(project, changes=store.film_changes_for_generate(pid, project.get("changes", {})))
     try:
         chosen = film_requests.from_changes(project.get("changes", {}))
@@ -518,7 +567,7 @@ def api_generate(req, pid):
         output, manifest = generate.run(store, project, template, source.read_bytes(), film_profiles=profiles)
     except generate.GenerateError as exc:
         return Reply({"error": str(exc), "checks": exc.checks}, 422)
-    return store.put_build(output, manifest)
+    return _save_generated_build(store, output, manifest, project)
 
 
 def _iiix_candidate_body(req):
@@ -547,8 +596,10 @@ def _iiix_candidate(req, pid, body):
     from . import gr3x_generation
     project, model, template = project_context(req, pid)
     project = copy.deepcopy(project)
-    if model != models.GR3X:
-        raise ApiError(422, '此入口仅用于 GR IIIx 1.60')
+    if model not in (models.GR3X, models.GR3X_170):
+        raise ApiError(422, '此入口仅用于 GR IIIx 1.60 / 1.70')
+    if body['recipe_extension'] and model != models.GR3X:
+        raise ApiError(422, '照片配方模块只在 GR IIIx 1.60 上有')
     if template.get('reviewed') is not True:
         raise ApiError(409, '模板不可用')
     if project.get('unsaved') or project.get('changes', {}) != body['expected_changes']:
@@ -561,7 +612,7 @@ def _iiix_candidate(req, pid, body):
             recipe_extension=body['recipe_extension'])
     except generate.GenerateError as exc:
         return Reply({'error': str(exc), 'checks': exc.checks}, 422)
-    return req.store.put_build(output, manifest)
+    return _save_generated_build(req.store, output, manifest, project)
 
 
 def api_film_catalog(req):
@@ -617,8 +668,8 @@ def _camera_model(req, pid):
     contract = base_curve.base_curve(source)
     if setup["state"] != "ready":
         fitting_setup.self_check(source, contract, root)
-    if project_context(req,pid)[1] == models.GR3X:
-        film_fit.contract_model(contract, models.GR3X.id)
+    if models.is_iiix(project_context(req,pid)[1]):
+        film_fit.contract_model(contract, project_context(req,pid)[1].id)
     return contract
 
 
@@ -669,7 +720,7 @@ def api_xmp_lut(req):
 def _factory_envelope(req, pid):
     """RICOH's own numeric ranges, read from this project's firmware (memory only).
     Raises when it cannot be read: writing is then refused, never let through."""
-    if project_context(req, pid)[1] == models.GR3X:
+    if models.is_iiix(project_context(req, pid)[1]):
         from .gr3x_factory_envelope import factory_envelope as read_iiix
         return read_iiix(_official(req, pid))
     return factory_envelope.factory_envelope(_official(req, pid))
@@ -695,7 +746,8 @@ def api_grade_limits(req, pid):
         table = json.loads(GRADE_LIMITS.read_text(encoding="utf-8"))
         films = sorted(table["fingerprint"]["previews"])
         valid = table.get("schema") == 1 and table["fingerprint"] == _grade_limits_fingerprint(films)
-        limits = table["models"].get(model.id) if valid else None
+        # 2.20 / 1.70 share the 2.10 / 1.60 table: same base curve, factory ranges and film data.
+        limits = table["models"].get(models.film_base(model).id) if valid else None
     except (OSError, ValueError, KeyError, TypeError, film_luts.FilmLutError, film_requests.FilmRequestError):
         valid, limits = False, None
     try:  # the page's rough hint while dragging (curve start follows black, end follows white)
@@ -836,7 +888,7 @@ def api_film_check(req, pid):
     for f in film_luts.catalog()["films"]:
         profile = film_profiles.load_profile(f["id"], model.id)
         bad = film_fit.envelope_violations(profile, env)
-        if model == models.GR3X and not bad:
+        if models.is_iiix(model) and not bad:
             from .gr3x_inplace_support import _numeric
             try:
                 _numeric(profile, env)
@@ -848,7 +900,7 @@ def api_film_check(req, pid):
 
 def api_film_prepare(req, pid):
     """Read an official original and return only a sparse-check summary."""
-    from . import inplace_generation, film_requests, body_target
+    from . import inplace_generation, film_requests, body_target, fwaddr
     body = req.read_json()
     if (type(body) is not dict or set(body) != {'expected_changes', 'request_id'} or
             type(body['expected_changes']) is not dict or
@@ -882,11 +934,12 @@ def api_film_prepare(req, pid):
         if len(official) != model.input_size or hashlib.sha256(official).hexdigest() != model.input_sha:
             raise ApiError(409, '官方原件校验失败，请重新导入')
         decoded = bytes(fwread.unpack(official))
-        if model == models.GR3X:
-            from .iiix_prepare import prepare
-            result = prepare(decoded, effective, profiles)
-        else:
-            result = inplace_generation.prepare(decoded, effective, film_profiles=profiles)
+        with fwaddr.firmware(model):   # 2.20 / 1.70: the same check at relocated addresses
+            if models.is_iiix(model):
+                from .iiix_prepare import prepare
+                result = prepare(decoded, effective, profiles)
+            else:
+                result = inplace_generation.prepare(decoded, effective, film_profiles=profiles)
         if (req.store.film_changes_for_generate(pid, project.get('changes', {})) != effective['changes'] or
                 req.store.film_luts(pid) != source_index or
                 (user_ids and req.store.film_lut_profiles(pid, user_ids) != profiles)):
@@ -943,7 +996,7 @@ def _fit_and_keep(req, pid, lid):
     entry = copy.deepcopy(req.store.film_luts(pid).get(lid))
     if entry is None:
         raise ApiError(404, '找不到这个 LUT')
-    if model == models.GR3X and entry.get('bake') is not None:
+    if models.is_iiix(model) and entry.get('bake') is not None:
         from .gr3x_recipe_lineage import metadata
         metadata(entry['bake'])
     contract = _camera_model(req, pid)
@@ -957,14 +1010,14 @@ def _fit_and_keep(req, pid, lid):
             req.store.set_film_lut_check(pid, lid, dict(writable=False, reason=reason, violations=violations, model_id=model.id))
         raise ApiError(422, reason + "。没有拟合进相机，也没有保存；可以点「收进相机范围」看看能写进相机的版本。")
     try:
-        if model == models.GR3X:
+        if models.is_iiix(model):
             from .gr3x_camera_preview import preview, installed_fit_report
             profile, report = film_fit.fit_cube(data,lid,contract,env,model_id=model.id)
         else:
-            profile, report = film_fit.fit_cube(data, lid, contract, env)
+            profile, report = film_fit.fit_cube(data, lid, contract, env, model_id=model.id)
     except (film_fit.FilmFitError, film_requests.FilmRequestError) as exc:
         refuse(*_fit_refusal(exc))
-    if model == models.GR3X:
+    if models.is_iiix(model):
         try:  # IIIx: the fit must also survive the 33-knot rebuild the camera will hold
             report = installed_fit_report(data,contract,profile,report,env)
         except ValueError as exc:
@@ -973,11 +1026,11 @@ def _fit_and_keep(req, pid, lid):
     if violations:
         refuse("超出了理光相机原厂的范围：" + violations[0], violations)
     report["envelope"] = dict(checked=True, model_id=env.get("model_id"), violations=violations)
-    if model == models.GR3X and entry.get('bake') is not None:
+    if models.is_iiix(model) and entry.get('bake') is not None:
         from .gr3x_recipe_lineage import attach
-        profile = attach(profile, entry['bake'])
-    camera = preview(contract['values'],profile,env) if model == models.GR3X else film_fit.camera_cube(contract['values'],profile)
-    if model == models.GR3X and (req.store.film_luts(pid).get(lid) != entry or
+        profile = attach(profile, entry['bake'], model)
+    camera = preview(contract['values'],profile,env) if models.is_iiix(model) else film_fit.camera_cube(contract['values'],profile)
+    if models.is_iiix(model) and (req.store.film_luts(pid).get(lid) != entry or
             req.store.film_lut_path(pid, lid).read_bytes() != data):
         raise ApiError(409, '拟合期间 LUT 或调色来源改变，请重新拟合')
     return req.store.set_film_lut_fit(pid, lid, profile, report, camera)
@@ -997,9 +1050,9 @@ def api_bake_grade(req, pid):
         raise ApiError(422, "选的胶片没有可用数据")
     grade = req.store._clean_grade("调色", grade)
     bake = {"film": film, "grade": grade}
-    if project_context(req,pid)[1] == models.GR3X:
+    if models.is_iiix(project_context(req,pid)[1]):
         from .gr3x_recipe_lineage import capture
-        bake['recipe_source'] = capture(req.store, pid, film)
+        bake['recipe_source'] = capture(req.store, pid, film, project_context(req,pid)[1])
     existed = film_luts.lut_id(cube.encode("utf-8")) in req.store.film_luts(pid)
     lut = req.store.put_film_lut(pid, cube.encode("utf-8"), body.get("name") or "调色", bake=bake)
     try:
@@ -1156,7 +1209,7 @@ def api_list_jobs(req, pid):
 
 
 def api_film_lut_camera(req, pid, lid):
-    if project_context(req, pid)[1] == models.GR3X:
+    if models.is_iiix(project_context(req, pid)[1]):
         from .gr3x_camera_preview import preview
         profile = req.store.film_lut_profiles(pid,[lid])[lid]
         return Reply(preview(_camera_model(req,pid)['values'],profile,_factory_envelope(req,pid)),content_type=TEXT_TYPE)
@@ -1175,7 +1228,7 @@ def api_film_camera(req, pid, fid):
     if key not in _CAMERA_CUBES:
         model = project_context(req,pid)[1]
         profile = film_profiles.load_profile(fid,model.id)
-        if model == models.GR3X:
+        if models.is_iiix(model):
             from .gr3x_camera_preview import preview
             _CAMERA_CUBES[key] = preview(contract['values'],profile,_factory_envelope(req,pid))
         else:

@@ -2211,13 +2211,13 @@
   "provenance": "Distributed Darkslide sources; MIT-derived hooks retain app/darkslide/_vendor notices; no original firmware bytes.",
   "schema": 1,
   "sources": {
-    "_vendor/gr3_film_hooks.py": "f1d71f0f7669e8a4681427ea0aeece76cbbd008e18321888505fce208d0cf6e4",
-    "_vendor/gr3_four_curve_hooks.py": "80d8f3eb26dffb9278fb13b78865a78060cf62b95bc0d31dbbc5ab2c05ce1c3f",
+    "_vendor/gr3_film_hooks.py": "e9565d0faf04577d246f4d3bb5a3ca6ab0c21cfce8d4a6575f434f9ded9ffa0c",
+    "_vendor/gr3_four_curve_hooks.py": "6b2f38802d3e21bbe2eae53a1290f5081fad0abaa15e0c4a56fe17f3719affdd",
     "film_arm_assemble.py": "1146ffc98f6273e58c52ee4e32f5fc97617074b402c4d83596587b5c034eeb0f",
-    "film_inplace_cache.py": "c166cb7bd518f00b1047ed03ea58be27683b06c0e6bfbc315556189eb1f415fd",
-    "film_scheme_c.py": "3e4c305efd5e2a3c62b2c45f1be52941d604008d0bca8efd0cfdcd569e47be1d",
-    "gr3x_inplace.py": "c4809c07505aeaa1684963993a13cdb670150bfed99773c8dbadc1bd22615b91",
-    "gr3x_inplace_support.py": "5f3ac51daab794a27d64fc4327f939c598f80ea47016ebd43459a9449680417f"
+    "film_inplace_cache.py": "53ce15c36cdeca6a1edc72f82b7c3a92973d8e18e64a122867f920183f9a0388",
+    "film_scheme_c.py": "05c5f28c253453994dd7b9b14237251091909c29fc6ec06c97c146392081d10c",
+    "gr3x_inplace.py": "8b3b5e9578582c6978e11ed7850ba331c6fbdc031f27de7cb3f329ec96a45f4d",
+    "gr3x_inplace_support.py": "a4038c1ead75d6b60a24b7182fe698fd952ea8837319bd741ebd359dba05c6b6"
   },
   "target": "armv7a-none-eabi"
 }

@@ -2,7 +2,9 @@
 Copyright (c) 2026 idontknownihil. See GR3_FILM_MODS_LICENSE.txt.
 Modified by LiorMoment: current-record selection, fixed full quartet, no global
 curve-pointer publication. Selected consumers now sample readonly knots directly.
+Firmware addresses relocate through fwaddr.A for GR III 2.20 / IIIx 1.70 (LiorMoment, 2026-10-26).
 """
+from ..fwaddr import A as fa
 
 
 def expand_source():
@@ -58,7 +60,7 @@ def getter_source(table, fallback_table, remap):
     D:  mov r1, r4
         mov r2, r5
         mov r3, r6
-        bl abs(0x536eedf0)
+        bl abs({fa(0x536eedf0):#x})
         movw r7, #{fallback_table & 65535:#x}
         movt r7, #{fallback_table >> 16:#x}
         mov r0, r4
@@ -127,7 +129,7 @@ def composer_source(table, point):
         add r1, r1, #16
         b L
     D:  ldr r3, [r11, #-0x44]
-        b abs(0x536e87cc)
+        b abs({fa(0x536e87cc):#x})
     S:  ldr r4, [r11, #-0x44]
         ldr r7, [r11, #-0x3c]
         ldr r8, [r11, #-0x38]
@@ -164,7 +166,7 @@ def composer_source(table, point):
         add r10, r10, #2
         cmp r10, #512
         bne P
-        b abs(0x536e89cc)
+        b abs({fa(0x536e89cc):#x})
     '''
 
 

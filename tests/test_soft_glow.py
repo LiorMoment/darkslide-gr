@@ -1,6 +1,6 @@
-"""柔光 (soft glow) v22.6: request shape, the pinned window file, the independent readback, and (with the
+"""柔光 (soft glow) v22.28: request shape, the pinned window file, the independent readback, and (with the
 real official files, DARKSLIDE_OFFICIAL_BIN / DARKSLIDE_IIIX_BIN) every generation route, alone and with
-every other change. GR III with only 柔光 must decode to exactly the delivered v22.6 test firmware. In
+every other change. GR III with only 柔光 must decode to exactly the pinned v22.28 build. In
 memory or in temporary folders only; nothing is flashed or written to a camera card."""
 import hashlib
 import json
@@ -25,7 +25,7 @@ class Shape(unittest.TestCase):
     def test_request(self):
         soft_glow.validate_request(soft_glow.edit())
         for bad in (dict(kind="soft_glow"), dict(kind="soft_glow", version="v22.4"),
-                    dict(kind="soft_glow", version="v22.6", level=2), dict(kind="glow", version="v22.6")):
+                    dict(kind="soft_glow", version="v22.28", level=2), dict(kind="glow", version="v22.28")):
             with self.assertRaises(edit_core.BuildError, msg=repr(bad)):
                 soft_glow.validate_request(bad)
 
@@ -33,7 +33,7 @@ class Shape(unittest.TestCase):
         rows = soft_glow_verify.windows()
         data = json.loads(soft_glow.DATA.read_text(encoding="utf-8"))
         self.assertEqual(data["version"], soft_glow.VERSION)
-        self.assertEqual(len(rows), 80)
+        self.assertEqual(len(rows), 79)
         self.assertTrue(all(len(old) == len(new) and old != new for _, old, new in rows))
         # The two glow modules are in it (effect 5216 B, platform 5044 B).
         sizes = {at: len(new) for at, _, new in rows}
@@ -118,26 +118,13 @@ class Real:
             self.assertIn("soft_glow_windows", [c["id"] for c in manifest["checks"]])
             self.assertIn("soft_glow", manifest["features"])
             self.assertEqual(manifest["summary"][0]["preset"], "柔光")
-            self.assertIn("v22.6", manifest["verification"])
+            self.assertIn("优化版", manifest["verification"])
             self.assertEqual(manifest["body"]["status"], "protected_windows_unchanged")
             after = bytes(fwread.unpack(output))
             for at, _, new in soft_glow_verify.windows():
                 self.assertEqual(after[at:at + len(new)], new)
             self.assertEqual(store.builds(), [])
             return manifest
-
-    def test_wide_ratio_still_refused(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            store = Store(tmp)
-            sha = store.put_input(self.raw)
-            pid = store.create_project("宽幅", sha, self.t, target_body=self.bodies[0])["id"]
-            caps = models.capabilities
-            with patch.object(models, "capabilities", lambda m: dict(caps(m), wide_ratio=True)):
-                store.put_draft(pid, {}, self.t, camera_features=dict(soft_glow=True, wide_ratio=True))
-                project = store.save(pid, self.t)
-            run = generate.run if self.model == models.GR3 else gr3x_generation.run
-            with self.assertRaisesRegex(generate.GenerateError, "65:24 宽幅还没有接进固件生成"):
-                run(store, project, self.t, self.raw)
 
 
 @unittest.skipUnless(OFFICIAL.exists(), "需要 DARKSLIDE_OFFICIAL_BIN（GR III 2.10 官方原件）")
@@ -150,8 +137,8 @@ class RealGR3(Real, unittest.TestCase):
 
     def test_alone(self):
         after = super().test_alone()
-        # Exactly the delivered v22.6 test firmware, decoded (checksum word included).
-        self.assertEqual(hashlib.sha256(after).hexdigest(), soft_glow_verify.V226_PAYLOAD_SHA256)
+        # Exactly the pinned v22.28 build, decoded (checksum word included).
+        self.assertEqual(hashlib.sha256(after).hexdigest(), soft_glow_verify.BUILD_PAYLOAD_SHA256)
 
     def test_with_four_films_on_the_1_0_route(self):
         films = [dict(kind="film", slot=s, film=f) for s, f in zip((8, 9, 10, 11), ("gold200", "portra400", "ektar100", "5219"))]

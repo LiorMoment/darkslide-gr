@@ -21,7 +21,7 @@ class ActualReadonlyHttp(Served):
             self.assertEqual(response.status,200,response.body)
             result=response.json();self.assertTrue(result['data_verified']);self.assertEqual(result['decoded_growth_bytes'],0)
             self.assertFalse(result['production_approved']);self.assertFalse(result['full_image_created'])
-            self.assertEqual([row['slot'] for row in result['slots'] if row['factory']],[9,10])
+            self.assertEqual([row['slot'] for row in result['slots'] if row['factory']],[2,9,10])
             rejected=self.call('POST','/api/projects/'+pid+'/generate',{})
             self.assertEqual(rejected.status,422,rejected.body)
             stale=self.call('POST','/api/projects/'+pid+'/film-prepare',dict(expected_changes={},request_id='stale'))

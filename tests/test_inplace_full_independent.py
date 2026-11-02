@@ -127,7 +127,7 @@ class BoundedRealReadback(unittest.TestCase):
 
 class SyntheticCompleteVerifier(unittest.TestCase):
     """Only a 256-byte toy container; actual decoder is trapped by a stub."""
-    def check(self, outside=False, overlap=False, metadata_lie=False):
+    def check(self, outside=False, overlap=False, metadata_lie=False, wrong_reader_layout=False):
         import hashlib
         from contextlib import ExitStack
         from unittest.mock import Mock
@@ -141,6 +141,7 @@ class SyntheticCompleteVerifier(unittest.TestCase):
         fake.icon_pixels.return_value=({'payload_offset':0},b'')
         fake.string.return_value={'text':''}
         proof={k:True for k in ('data_verified','shared_bytes_match_reference','complete_window_coverage_verified')}
+        proof['layout']='inplace_history_cache_exit_vivid5_v1' if wrong_reader_layout else reader.LAYOUT
         spans=((100,b'film'),(101,b'x')) if overlap else ((100,b'film'),)
         result=dict(output=official,output_sha256=hashlib.sha256(official).hexdigest(),
                     payload_sha256_after=hashlib.sha256(after).hexdigest(),
@@ -164,6 +165,7 @@ class SyntheticCompleteVerifier(unittest.TestCase):
         self.assertTrue(cv.all_ok(self.check()))
         self.assertFalse(cv.all_ok(self.check(outside=True)))
         self.assertFalse(cv.all_ok(self.check(overlap=True)))
+        self.assertFalse(cv.all_ok(self.check(wrong_reader_layout=True)))
 
     def test_result_cannot_choose_layout_or_authorize_spans(self):
         from darkslide import composite_verify as cv

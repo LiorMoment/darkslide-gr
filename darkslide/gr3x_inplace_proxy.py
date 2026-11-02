@@ -8,6 +8,7 @@ import struct
 from .film_requests import FilmRequestError
 from .film_arm_assemble import assemble
 from .film_patch_plan import _branch
+from .fwaddr import A as fa
 
 FUNCTIONS=(0x532BD784,0x532BDCD8,0x532BE22C,0x532BE8A0,0x532BEF14,0x532BF588,
            0x532BFBFC,0x532C0DA8,0x532C141C,0x532C34E8,0x532C3B54,0x532C41C0,
@@ -84,7 +85,7 @@ def _tail(word,pc):
     delta=word&0xFFFFFF
     if delta&0x800000:delta-=1<<24
     at=pc+8+delta*4
-    if at%4 or not 0x53000000<=at<0x540B55C0:raise FilmRequestError('标准滑杆尾目标越界')
+    if at%4 or not fa(0x53000000)<=at<fa(0x540B55C0):raise FilmRequestError('标准滑杆尾目标越界')
     return at
 
 def derive(read,slots,allocate):
@@ -92,7 +93,7 @@ def derive(read,slots,allocate):
     mask=mask_slots(slots)
     if not mask:return (),(),dict(mask=0,switches=0,predicates=0)
     tables=[]
-    for start in FUNCTIONS:
+    for start in fa(FUNCTIONS):
         words=struct.unpack('<512I',read(start,2048))
         end=next((i for i,w in enumerate(words[1:],1) if w==0xE1A0C00D),None)
         if end is None:raise FilmRequestError('标准滑杆函数边界不匹配')
@@ -103,16 +104,16 @@ def derive(read,slots,allocate):
                 tables.append(start+4*i+16)
     if len(tables)!=102 or len(set(tables))!=102:raise FilmRequestError('标准滑杆102处切换点不匹配')
     changes=[]
-    for table in tables+list(MENU_TABLES):
+    for table in tables+list(fa(MENU_TABLES)):
         target=int.from_bytes(read(table,4),'little')
-        if target%4 or not 0x53000000<=target<0x540B55C0:raise FilmRequestError('标准菜单目标不匹配')
+        if target%4 or not fa(0x53000000)<=target<fa(0x540B55C0):raise FilmRequestError('标准菜单目标不匹配')
         for i in range(4):
             if mask&(1<<i):
                 at=table+4*(7+i);changes.append((at,int.from_bytes(read(at,4),'little'),target))
-    for i,(at,target) in enumerate(PIPELINE):
-        if mask&(1<<i):changes.append((at,_branch(at,target,condition=0),_branch(at,0x536DBAA4,condition=0)))
+    for i,(at,target) in enumerate(fa(PIPELINE)):
+        if mask&(1<<i):changes.append((at,_branch(at,target,condition=0),_branch(at,fa(0x536DBAA4),condition=0)))
     handlers={b:allocate("proxy_dispatch_"+str(b),dispatch_source(b,mask)) for b in range(3)}
-    for i,at in enumerate(ACTIVE):
+    for i,at in enumerate(fa(ACTIVE)):
         bank=i//9;n=12 if bank==0 else 13;words=struct.unpack('<'+str(n)+'I',read(at,n*4))
         if bank==0:
             fixed={0:0xE5903004,1:0xE5D32044,2:0xE3520000,4:0xE59331C0,5:0xE3C334FF,6:0xE3C33CFF,7:0xE353080B,9:0xE3A00000,10:0xE12FFF1E,

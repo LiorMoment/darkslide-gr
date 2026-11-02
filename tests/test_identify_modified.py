@@ -31,6 +31,19 @@ class Rules(unittest.TestCase):
         self.assertEqual(r["kind"], "rejected")
         self.assertNotIn("改过的", r["reason"])
 
+    def test_unknown_file_lists_every_supported_version(self):
+        for name in ("fwdc243b.bin", "IMG_0001.JPG"):
+            r = I.identify(b"x" * 300, name, self.t, [])
+            self.assertEqual(r["kind"], "rejected")
+            self.assertIn("GR III 2.10 / 2.20 · GR IIIx 1.60 / 1.70", r["reason"])
+
+    def test_look_alike_names_the_matching_version_not_the_default(self):
+        from darkslide import models
+        for m in models.ALL:
+            r = I.identify(b"x" * m.input_size, m.filename, self.t, [])
+            self.assertIn("像 %s " % m.name, r["reason"])
+            self.assertIn("可能被改过", r["reason"])
+
     def test_own_build_still_opens_its_project(self):
         data = b"H" * 128 + b"build"
         r = I.identify(data, "fwdc239b.bin", self.t, [dict(output_sha256=I.digest_of(data), project_id="p_000000000000")])

@@ -138,13 +138,19 @@ const factoryUrl = (no) => state.factory ? "/api/factory/" + state.project.input
 // Camera choice: a series (one firmware file per series) and a model inside it. The base GR III and the
 // GR III HDF have been tested on a camera; any other model asks the user to confirm before going on.
 const RICOH_FW = "https://www.ricoh-imaging.co.jp/resources/japan/support/download/digital/FIRMWARE/";
+// Every official firmware a series accepts, newest first: [version, zip]. A camera already on
+// 2.20 / 1.70 needs that file, one still on 2.10 / 1.60 the older one, so the start page offers both.
+function firmwareDownloads(ser) {
+  const zips = ser.zips || { [ser.ver]: ser.zip };
+  return Object.keys(zips).sort((a, b) => parseFloat(b) - parseFloat(a)).map((v) => [v, zips[v]]);
+}
 const SERIES = [
-  { name: "GR III 系列", short: "GR III", desc: "28mm · 固件 2.10 · 4 个型号共用", tag: "可用", ready: true,
-    fw: "fwdc239b.bin", ver: "2.10", zip: "gr3_v210.zip", licence: "https://www.ricoh-imaging.co.jp/english/support/digital/gr3_s.html",
+  { name: "GR III 系列", short: "GR III", desc: "28mm · 固件 2.10 / 2.20 · 4 个型号共用", tag: "可用", ready: true,
+    fw: "fwdc239b.bin", ver: "2.10", zip: "gr3_v210.zip", zips: { "2.10": "gr3_v210.zip", "2.20": "gr3_v220.zip" }, licence: "https://www.ricoh-imaging.co.jp/english/support/digital/gr3_s.html",
     note: "同一个固件文件通用于 GR III、街拍版、日记版、HDF。",
     models: [["GR III", "标准版", true], ["GR III Street Edition", "街拍版"], ["GR III Diary Edition", "日记版"], ["GR III HDF", "带柔光滤镜", true]] },
-  { name: "GR IIIx 系列", short: "GR IIIx", desc: "40mm · 固件 1.60 · 3 个型号共用", tag: "可用", ready: false,
-    fw: "fwdc243b.bin", ver: "1.60", zip: "gr3x_v160.zip", licence: "https://www.ricoh-imaging.co.jp/english/support/digital/gr3x_s.html",
+  { name: "GR IIIx 系列", short: "GR IIIx", desc: "40mm · 固件 1.60 / 1.70 · 3 个型号共用", tag: "可用", ready: false,
+    fw: "fwdc243b.bin", ver: "1.60", zip: "gr3x_v160.zip", zips: { "1.60": "gr3x_v160.zip", "1.70": "gr3x_v170.zip" }, licence: "https://www.ricoh-imaging.co.jp/english/support/digital/gr3x_s.html",
     note: "同一个固件文件通用于 GR IIIx、城市版、HDF。",
     models: [["GR IIIx", "标准版", true], ["GR IIIx Urban Edition", "城市版"], ["GR IIIx HDF", "带柔光滤镜"]] },
   { name: "GR IV", short: "GR IV", desc: "28mm · 新一代", tag: "适配中", off: true, models: [] },
@@ -211,9 +217,13 @@ function renderVariants() {
   $("camConfirmBox").checked = !!cam.ok[m[0]];
   // download link and file names follow the series
   if (window.resetFwGet) window.resetFwGet();
-  $("fwDownload").href = RICOH_FW + ser.zip;
-  $("fwDownload").textContent = "下载 " + ser.short + " " + ser.ver;
-  $("fwHint").textContent = ser.zip + " 不用解压，" + ser.fw + " 也可以";
+  const downloads = firmwareDownloads(ser);
+  $("fwLinks").replaceChildren(...downloads.flatMap(([ver, zip], i) => [
+    ...(i ? [document.createTextNode(" · ")] : []),
+    el("a", { class: "fw-dl", href: RICOH_FW + zip, rel: "noopener noreferrer", text: i ? ver : "下载 " + ser.short + " " + ver }),
+  ]));
+  $("fwWhich").hidden = downloads.length < 2;
+  $("fwHint").textContent = downloads.map(([, zip]) => zip).join(" / ") + " 不用解压，" + ser.fw + " 也可以";
   $("fwLicence").href = ser.licence;
   $("drop").classList.toggle("off", !ser.ready);
   $("fileInput").disabled = !ser.ready;
@@ -370,6 +380,7 @@ async function openWithPickedModel(id, force) {
 async function loadProject(p) {
   invalidateFilmPrepare();
   state.project = p;
+  const opened = state.opened = (state.opened || 0) + 1;  // each opening, unlike state.project, which every draft save replaces
   if (p.template) state.template = p.template;
   if (p.detail) state.status.detail = p.detail;
   $("chipModel").textContent = p.camera_variant || state.template.model;
@@ -383,6 +394,21 @@ async function loadProject(p) {
   cameraButton.disabled = !!(p.capabilities && !p.capabilities.camera_fit);
   if (cameraButton.disabled && state.view === "camera") state.view = "split";
   $("outputVersion").textContent = state.template.firmware + "（不变）";
+  // GR III 2.20 / GR IIIx 1.70: an entry whose adaptation has not landed yet (capability false) is closed
+  // instead of offering something generation would refuse.
+  const caps = p.capabilities || {};
+  const notAdapted = caps.films === false;
+  for (const [id, what, cap, feature] of [["featShutdown", "关机画面", "shutdown", "shutdown"], ["featSoft", "柔光", "soft_glow", "soft"]]) {
+    const b = $(id), closed = caps.new_firmware === true && caps[cap] === false;
+    if (b.dataset.title === undefined) b.dataset.title = b.title;
+    b.disabled = closed;
+    b.title = closed ? `${what}还没有适配固件 ${state.template.firmware}` : b.dataset.title;
+    if (closed && state.feature === feature) state.feature = "ic";
+  }
+  $("filmField").hidden = notAdapted;
+  $("filmOut").hidden = notAdapted;
+  $("filmNotAdapted").hidden = !notAdapted;
+  $("filmNotAdapted").textContent = notAdapted ? `胶片 LUT 还没有适配固件 ${state.template.firmware}，这一版只能改图标、预设名、颗粒和菜单顺序。` : "";
   state.changes = JSON.parse(JSON.stringify(p.draft.changes || {}));
   state.order = window.DarkslideOrder.fromServer(p.draft.menu_order);
   state.features = Object.assign({}, p.draft.camera_features || {});
@@ -396,7 +422,11 @@ async function loadProject(p) {
   state.draftState = p.unsaved ? "草稿未正式保存" : (p.saved_at ? "已保存 " + p.saved_at.slice(11, 16) : "未保存");
   $("projectTitle").value = p.title;
   renderProjectBody();
-  try { state.factory = await api("GET", "/api/factory/" + p.input_sha256); } catch (e) { state.factory = null; }
+  let factory = null;
+  try { factory = await api("GET", "/api/factory/" + p.input_sha256); } catch (e) { factory = null; }
+  // another project (or this one again) was opened while waiting: that opening carries on, not this one
+  if (state.opened !== opened) return;
+  state.factory = factory;
   show("viewWork");
   renderAll();
   if (state.orderProblem) toast(`已存的菜单顺序无法读取，已按原厂顺序显示，保存后会清除（${state.orderProblem}）`, true);
@@ -453,16 +483,16 @@ function maybeGuide(flow) {
   }));
 }
 
-// Workbench (F35; 1.6.0): the "这一版新增" card once, then a 2-step tour of 界面颜色 / 预设列表, then (for
+// Workbench (F35; 1.6.1): the "这一版新增" card once, then a 2-step tour of 鲜艳 / 预设列表, then (for
 // someone who never had it) the 5-step preset-editing guide. 以后再说 closes them all for good; the "?" on the
 // editing page or Settings replays the tour and the editing guide. Whoever saw the 1.0 card still gets this one.
 function maybeWorkGuide() {
   const prefs = (state.status && state.status.prefs) || {};
   if (prefs.guide_off || window.DarkslideGuide.active()) return;
-  if (!prefs.guide_v3_news_seen) {  // 1.6.0: the new look; whoever saw the 1.5.0 card (v2) gets this one once
+  if (!prefs.guide_v4_news_seen) {  // 1.6.1: new firmware and Vivid; whoever saw the 1.6.0 card (v3) gets this one once
     requestAnimationFrame(() => !window.DarkslideGuide.active() && window.DarkslideGuide.start("news", async (forever, how) => {
-      if (forever) { await setPrefs([["guide_v3_news_seen", true], ["guide_v2_news_seen", true], ["guide_v1_news_seen", true], ["guide_off", true]]); return; }
-      await setPrefs([["guide_v3_news_seen", true], ["guide_v2_news_seen", true], ["guide_v1_news_seen", true]]);
+      if (forever) { await setPrefs([["guide_v4_news_seen", true], ["guide_v3_news_seen", true], ["guide_v2_news_seen", true], ["guide_v1_news_seen", true], ["guide_off", true]]); return; }
+      await setPrefs([["guide_v4_news_seen", true], ["guide_v3_news_seen", true], ["guide_v2_news_seen", true], ["guide_v1_news_seen", true]]);
       if (how === "next") startTour(() => { if (!prefs.guide_editor_seen) startEditorGuide(); });
       else if (!prefs.guide_editor_seen) await setPref("guide_editor_seen", true);
     }));
@@ -482,7 +512,7 @@ function startTour(then) {
 
 function startEditorGuide() {
   if (state.feature !== "ic") { state.feature = "ic"; renderAll(); }
-  // The tour shows the film tiles, which only open on the four film presets: start on 银流冲洗.
+  // The tour shows the film tiles, which only open on replaceable film presets.
   const films = window.DarkslideFilm ? window.DarkslideFilm.SLOTS : [];
   if (films.length && !films.includes(state.sel)) { state.sel = films[0]; renderAll(); }
   requestAnimationFrame(() => window.DarkslideGuide.start("editor", (forever) => {
@@ -502,7 +532,7 @@ function restore(snap) {
 
 // 柔光 / 65:24 宽幅 (whole-camera switches, user 2026-10-24). A switch can only be turned on when the model's
 // capability allows it; until the firmware side is built that is never, and the switch stays greyed.
-const CAMERA_FEATURES = [["soft_glow", "柔光", "softSwitch"], ["wide_ratio", "65:24 宽幅", "ratioSwitch"]];
+const CAMERA_FEATURES = [["soft_glow", "柔光", "softSwitch"], ["wide_ratio", "16:9 和 65:24 宽幅", "ratioSwitch"], ["date_stamp", "日期印记", "dateSwitch"]];
 function setFeature(name, on) {
   if (on && !featureOn(name)) { toast("这项功能还在研发，暂时不能装进相机", true); return; }
   state.undo.push(snapshot());
@@ -510,6 +540,9 @@ function setFeature(name, on) {
   state.redo = [];
   const next = Object.assign({}, state.features);
   if (on) next[name] = true; else delete next[name];
+  // 日期印记 is built on 柔光 + 画幅: one brings the others on, turning one of them off takes the date off.
+  if (on && name === "date_stamp") { next.soft_glow = true; next.wide_ratio = true; }
+  if (!on && name !== "date_stamp") delete next.date_stamp;
   state.features = next;
   scheduleDraft();
   renderAll();
@@ -545,11 +578,41 @@ function setFilm(no, id) {
     if (id === undefined) delete slot.film; else slot.film = id;
     delete slot.grade;
   });
-  // The film icon is put on the preset in the background (about a second). 生成 waits for it: a change
-  // landing mid-build made the server refuse it as 「生成期间工程…改变」 (found in testing, 2026-10-26).
+  trackIconSync(no, id);
+  syncFilmName(no, id, prev);
+}
+
+// The film icon is put on the preset in the background (about a second). 生成 waits for it: a change
+// landing mid-build made the server refuse it as 「生成期间工程…改变」 (found in testing, 2026-10-26).
+function trackIconSync(no, id) {
+  // while 生成 runs nothing may change the project: an automatic sync (an icon that loaded, a mismatch put
+  // right on opening) waits until the build is over
+  if (state.iconHold) { (state.iconLater || (state.iconLater = [])).push([no, id, state.opened]); return; }
   const sync = syncFilmIcon(no, id), pend = state.iconSyncs || (state.iconSyncs = new Set());
   if (sync && sync.finally) { pend.add(sync); sync.finally(() => pend.delete(sync)); }
-  syncFilmName(no, id, prev);
+}
+
+// The user's icon for a film loaded after all: presets that got the film's name plate only because that
+// icon could not be read then (fallback) take it now. Presets with the user's own uploaded icon have no
+// film mark and are never touched.
+function filmIconReady(id, pid) {
+  if (!state.project || (pid !== undefined && state.project.id !== pid)) return;  // film list of another project
+  // remembered, so a sync still on its way with a stand-in plate retries once it has stored it
+  const at = state.iconReadyAt || (state.iconReadyAt = {});
+  at[id] = state.iconReadyStamp = (state.iconReadyStamp || 0) + 1;
+  for (const [no, c] of Object.entries(state.changes)) {
+    if (c && c.film === id && c.icon && c.icon.film === id && c.icon.fallback) trackIconSync(Number(no), id);
+  }
+}
+
+// The film list is loaded for the open project: a preset whose icon came from another film than the one
+// it has now (the page was closed, or another project opened, before the icon was put on) gets its own
+// film's icon. Only icons that follow a film; the user's own uploaded icon has no film mark.
+function filmsReady(pid) {
+  if (!state.project || (pid !== undefined && state.project.id !== pid)) return;  // film list of another project
+  for (const [no, c] of Object.entries(state.changes)) {
+    if (c && c.icon && c.icon.film && c.icon.film !== c.film) trackIconSync(Number(no), c.film);
+  }
 }
 
 // Picking a built-in film also renames the preset to that film (user, 2026-10-17: 「名字也帮我自动替换」),
@@ -571,32 +634,65 @@ function syncFilmName(no, id, prev) {
 async function syncFilmIcon(no, id) {
   const s = slotOf(no), cur = (state.changes[no] || {}).icon;
   if (!s || !editable(s, "icon") || (cur && !cur.film)) return;
+  if ((state.changes[no] || {}).film !== id) return;  // the preset has another film now: that one's sync decides
   const F = window.DarkslideFilm, plate = id ? F.plateIcon(id) : null;
   if (plate === undefined) return;  // film list not loaded yet
   if (!plate) { if (cur) setEdit(no, "icon", undefined); return; }   // no film, or the user's own LUT
-  if (cur && cur.film === id) return;
+  const url = F.iconUrl(id);
+  // the same film again: done, unless its plate only stands in for the user's icon and that can be read now
+  if (cur && cur.film === id && !(cur.fallback && url)) return;
+  // A later sync of this preset makes this one stale, and a sync started for another project (or before
+  // the project was opened again) never writes: an older failed request finishing after a newer one that
+  // worked must not put the stand-in plate back.
+  const turns = state.iconTurns || (state.iconTurns = {}), turn = (turns[no] = (turns[no] || 0) + 1);
+  const opened = state.opened, seen = (state.iconReadyAt || {})[id] || 0;
   try {
     let source = plate.source, small = plate.small, r = plate.crop, pixels = null;
-    const url = F.iconUrl(id);
+    // the plate stands in for a user's icon that could not be read on this page load
+    let fallback = !url && F.iconMissed(id);
     if (url) {
-      const blob = await fetch(url).then((res) => { if (!res.ok) throw new Error("图标读不出来"); return res.blob(); });
-      const img = await loadImage(blob).catch(() => { throw new Error("图标读不出来"); });
-      const px = await window.DarkslidePixels.decode(blob, img);
-      const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
-      source = document.createElement("canvas");
-      source.width = Math.round(img.naturalWidth * k); source.height = Math.round(img.naturalHeight * k);
-      source.getContext("2d").drawImage(img, 0, 0, source.width, source.height);
-      // the largest centred area with the camera icon's visible shape (38×36), in source pixels
-      const w = Math.min(source.width, source.height * VIS.w / VIS.h), h = w * VIS.h / VIS.w;
-      r = { sx: (source.width - w) / 2, sy: (source.height - h) / 2, sw: w, sh: h };
-      small = document.createElement("canvas");
-      small.width = small.height = 40;
-      pixels = drawIcon(small, { sx: r.sx / k, sy: r.sy / k, sw: r.sw / k, sh: r.sh / k }, px);
+      try {
+        const blob = await fetch(url).then((res) => { if (!res.ok) throw new Error("图标读不出来"); return res.blob(); });
+        const img = await loadImage(blob).catch(() => { throw new Error("图标读不出来"); });
+        const px = await window.DarkslidePixels.decode(blob, img);
+        const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+        const own = document.createElement("canvas");
+        own.width = Math.round(img.naturalWidth * k); own.height = Math.round(img.naturalHeight * k);
+        own.getContext("2d").drawImage(img, 0, 0, own.width, own.height);
+        // the largest centred area with the camera icon's visible shape (38×36), in source pixels
+        const w = Math.min(own.width, own.height * VIS.w / VIS.h), h = w * VIS.h / VIS.w;
+        const crop = { sx: (own.width - w) / 2, sy: (own.height - h) / 2, sw: w, sh: h };
+        small = document.createElement("canvas");
+        small.width = small.height = 40;
+        pixels = drawIcon(small, { sx: crop.sx / k, sy: crop.sy / k, sw: crop.sw / k, sh: crop.sh / k }, px);
+        source = own; r = crop;
+      } catch (e) {
+        // the user's file cannot be read: the film's name plate, not the last film's icon
+        source = plate.source; small = plate.small; r = plate.crop; pixels = null; fallback = true;
+        toast("自定义图标读不出来，已改用胶片名牌", true);
+      }
     }
-    const up = [await uploadPng(source, "source"), await (pixels ? uploadIcon(pixels) : uploadPng(small, "icon"))];
+    // the retry failed again and the preset already has this film's stand-in plate: nothing to store (a file
+    // that loads but will not decode would otherwise mark the project unsaved on every opening)
+    const had = (state.changes[no] || {}).icon;
+    if (fallback && had && had.film === id && had.fallback) return;
+    // assets go to the project this sync belongs to; none at all once another project is open
+    if (!state.project || state.opened !== opened) return;
+    const pid = state.project.id, source0 = await uploadPng(source, "source", pid);
+    if (!state.project || state.opened !== opened) return;
+    const up = [source0, await (pixels ? uploadIcon(pixels, pid) : uploadPng(small, "icon", pid))];
+    if (!state.project || state.opened !== opened) return;  // another project, or this one opened again
     const now = state.changes[no] || {};
     if (now.film !== id || (now.icon && !now.icon.film)) return;  // changed again meanwhile
-    setEdit(no, "icon", { asset: up[1].asset, source: up[0].asset, style: "image", crop: r, film: id });
+    // a newer sync of this preset wins, except that the user's icon may still replace a stand-in plate
+    const standIn = now.icon && now.icon.film === id && now.icon.fallback;
+    if (turns[no] !== turn && (fallback || !standIn)) return;
+    const icon = { asset: up[1].asset, source: up[0].asset, style: "image", crop: r, film: id };
+    if (fallback) icon.fallback = true;  // taken back by filmIconReady once the user's icon loads
+    setEdit(no, "icon", icon);
+    // the user's icon loaded while this sync was on its way, before the plate carried its mark, so
+    // filmIconReady found nothing to take back: try again now (once per load, never in a loop)
+    if (fallback && ((state.iconReadyAt || {})[id] || 0) > seen) trackIconSync(no, id);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -980,7 +1076,7 @@ function renderChanges() {
   $("genCount").textContent = rows.filter((r) => !r.classList.contains("pending")).length + " 项";
   const np = presetKeys().length;
   $("changeSlots").textContent = [np ? np + " 个预设" : "", sd ? "关机画面" : "", state.orderProblem || (orderOn() && state.order) ? "菜单顺序" : "",
-    state.features.wide_ratio ? "画幅" : "", state.features.soft_glow ? "柔光" : ""].filter(Boolean).join(" · ");
+    state.features.wide_ratio ? "画幅" : "", state.features.soft_glow ? "柔光" : "", state.features.date_stamp ? "日期印记" : ""].filter(Boolean).join(" · ");
   $("changeList").replaceChildren(...(rows.length ? rows : [el("div", { class: "empty", text: "还没有改动" })]));
   // the list scrolls inside the fixed sidebar: bring a newly added change into view
   const fresh = $("changeList").querySelector(".change.enter");
@@ -1033,9 +1129,9 @@ function onNameInput() {
 }
 
 // ---------------------------------------------------------------- icons
-async function uploadPng(canvas, kind) {
+async function uploadPng(canvas, kind, pid = state.project.id) {
   const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
-  return api("POST", "/api/projects/" + state.project.id + "/assets?kind=" + kind, blob);
+  return api("POST", "/api/projects/" + pid + "/assets?kind=" + kind, blob);
 }
 
 function loadImage(file) {
@@ -1075,8 +1171,8 @@ function drawIcon(target, r, px) {
 }
 
 // An icon's pixels as the PNG the server keeps, the same bytes in every browser.
-function uploadIcon(rgba) {
-  return api("POST", "/api/projects/" + state.project.id + "/assets?kind=icon",
+function uploadIcon(rgba, pid = state.project.id) {
+  return api("POST", "/api/projects/" + pid + "/assets?kind=icon",
     new Blob([window.DarkslidePixels.png(40, 40, rgba)], { type: "image/png" }));
 }
 
@@ -1248,11 +1344,15 @@ async function prepareFilms() {
 
 // ---------------------------------------------------------------- generate
 // The camera menu language the firmware is made for; 生成 stays off until one is chosen.
-// A project without one gets the computer's language preselected (and saved), with a
-// note to check it against the camera; picking another one by hand removes the note.
+// A project without one gets the page's interface language preselected (and saved), the
+// browser's languages only when that is unknown, with a note to check it against the camera;
+// picking another one by hand removes the note (user, 2026-10-29: follow the interface language).
 const MENU_LANGS = ["ja", "en", "fr", "de", "es", "pt", "it", "nl", "da", "sv", "fi", "pl", "cs", "hu",
   "tr", "el", "ru", "ko", "zh-TW", "zh-CN", "th"];
+const UI_MENU_LANG = { "zh-Hans": "zh-CN", "zh-Hant": "zh-TW", en: "en", ja: "ja", ko: "ko" };
 function guessMenuLanguage() {
+  const ui = window.DarkslideI18n && window.DarkslideI18n.lang();
+  if (UI_MENU_LANG[ui]) return UI_MENU_LANG[ui];
   const tags = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""];
   for (const tag of tags) {
     const t = String(tag).toLowerCase();
@@ -1294,8 +1394,30 @@ async function setMenuLanguage(code, auto = false) {
   } catch (e) { toast(e.message, true); renderMenuLanguage(); }
 }
 
+// 生成 starts once no icon sync is running, including retries that the ones it waited for started, and
+// holds any new automatic sync until it is over (they would change the project mid-build).
+// One 生成 at a time: a second click while one runs (or waits for icons) does nothing. It goes on only
+// for the project opening it was clicked in; a sync held meanwhile runs afterwards only in the opening
+// it was started for.
 async function generate() {
-  if (state.iconSyncs && state.iconSyncs.size) await Promise.allSettled([...state.iconSyncs]);
+  if (state.generateBusy || !state.project) return;
+  state.generateBusy = true;
+  const opened = state.opened;
+  try {
+    while (state.iconSyncs && state.iconSyncs.size) await Promise.allSettled([...state.iconSyncs]);
+    if (!state.project || state.opened !== opened) return;  // closed, another project, or opened again
+    state.iconHold = true;
+    await generateNow();
+  } finally {
+    state.generateBusy = false;
+    state.iconHold = false;
+    const later = state.iconLater || [];
+    state.iconLater = [];
+    for (const [no, id, at] of later) if (state.project && state.opened === at) trackIconSync(no, id);
+  }
+}
+
+async function generateNow() {
   if (!state.project.menu_language) { toast("先选择相机使用的菜单语言", true); return; }
   const candidate = !!(state.project.capabilities && state.project.capabilities.candidate_generation);
   const recipeExtension = candidate && !!state.project.capabilities.candidate_recipe_extension && $("iiixRecipeExtension").checked;
@@ -1319,22 +1441,59 @@ async function generate() {
     return;
   }
   if (!hasEdits() && !recipeExtension) { toast("还没有改动", true); return; }
+  const fw = state.template.firmware, file = ((state.template.official_inputs || [])[0] || {}).filename;
   if (!(state.status.prefs || {}).preflight_seen) {
-    $("preflightRecovery").textContent = candidate
+    // what the first-build reminder says depends on the model and version: only some have been on a camera
+    const newer = !!(state.project.capabilities && state.project.capabilities.new_firmware);
+    $("preflightRecovery").textContent = newer
+      ? `本次为 ${state.template.model} ${fw} 固件，官方原件为 ${file}；${fw} 的适配还没有在任何相机上实测，刷回官方 ${fw} 也没有验证过。准备一张只放这个原件的救机卡。`
+      : candidate
       ? "本次为 GR IIIx 1.60 固件，官方原件为 fwdc243b.bin；标准版已有用户实机刷入使用，城市版、HDF 和刷回官方 1.60 尚未实机验证。"
-      : "准备一张只放官方 2.10 原件 fwdc239b.bin 的救机卡。";
+      : `准备一张只放官方 ${fw || "2.10"} 原件 ${file || "fwdc239b.bin"} 的救机卡。`;
     $("preflightDialog").showModal(); return;
   }
   // IIIx models other than the standard one (tested on a camera by a user) ask again every time; so does
-  // every IIIx when the build carries 菜单排序 or 柔光, which are tested on GR III only (已适配·未实测).
-  const fresh = [orderOn() && window.DarkslideOrder.payload(state.order) != null ? "菜单排序" : "",
-    (state.features || {}).soft_glow ? "柔光" : ""].filter(Boolean);
+  // every IIIx when the build carries 菜单排序, which is tested on GR III only (已适配·未实测).
+  const fresh = [orderOn() && window.DarkslideOrder.payload(state.order) != null ? "菜单排序" : ""].filter(Boolean);
+  // 柔光: this build has not been on a camera yet, on any firmware; every build with it asks.
+  const glowUntested = !!(state.features || {}).soft_glow;
   const untestedVariant = state.project.camera_variant !== "GR IIIx";
-  if (candidate && (untestedVariant || fresh.length) && !state.untestedAck) {
+  // GR III 2.20 / GR IIIx 1.70: nothing has been flashed on these yet, so every build asks.
+  const newFirmware = !!(state.project.capabilities && state.project.capabilities.new_firmware);
+  // The fifth film position has not been on any camera, on any firmware: it asks every time too.
+  const vivid = !!(state.changes[2] && state.changes[2].film);
+  // 画幅: this build has not been on a camera yet, on any body; every build with it asks.
+  const wideUntested = !!(state.features || {}).wide_ratio;
+  if ((newFirmware || vivid || wideUntested || glowUntested || (candidate && (untestedVariant || fresh.length))) && !state.untestedAck) {
     const body = state.project.camera_variant || state.project.target_body || "";
-    $("untestedBody").textContent = body ? "（这次是 " + body + "）" : "";
-    $("untestedVariant").hidden = !untestedVariant;
-    $("untestedFeatures").hidden = !fresh.length;
+    if (newFirmware) {
+      // keep the GR IIIx wording to put back when a GR IIIx 1.60 project asks later
+      for (const id of ["untestedHead", "untestedVariant", "untestedRescue"])
+        if ($(id).dataset.text === undefined) $(id).dataset.text = $(id).innerHTML;
+      $("untestedHead").textContent = `这次生成的内容还没在固件 ${fw} 上实测过`;
+      $("untestedVariant").textContent = body
+        ? `${state.template.model} ${fw} 是理光 2026-10-21 发布的新固件。DARKSLIDE GR 对它的适配（这次是 ${body}）目前只做了离线核对：安装、开机、菜单、拍出来的效果，以及刷回官方 ${fw} 救机，都还没在真机上验证过。`
+        : `${state.template.model} ${fw} 是理光 2026-10-21 发布的新固件。DARKSLIDE GR 对它的适配目前只做了离线核对：安装、开机、菜单、拍出来的效果，以及刷回官方 ${fw} 救机，都还没在真机上验证过。`;
+      $("untestedRescue").textContent = `刷之前请准备一张只放官方 ${fw} 原件 ${file} 的救机卡。如果刷坏到按住 MENU 开机也进不了更新画面，目前没有已验证的恢复办法。`;
+    } else if (!candidate) {
+      // GR III 2.10: only the fifth position brings this dialog; the GR IIIx wording does not apply
+      for (const id of ["untestedHead", "untestedVariant", "untestedRescue"])
+        if ($(id).dataset.text === undefined) $(id).dataset.text = $(id).innerHTML;
+      $("untestedHead").textContent = "这次生成的内容有还没实测的部分";
+      $("untestedRescue").textContent = `刷之前请准备一张只放官方 ${fw} 原件 ${file} 的救机卡。如果刷坏到按住 MENU 开机也进不了更新画面，目前没有已验证的恢复办法。`;
+    } else {
+      for (const id of ["untestedHead", "untestedVariant", "untestedRescue"]) {
+        const n = $(id);
+        if (n.dataset && n.dataset.text !== undefined) n.innerHTML = n.dataset.text;
+      }
+      $("untestedBody").textContent = body ? "（这次是 " + body + "）" : "";
+    }
+    $("untestedVariant").hidden = !(newFirmware || (candidate && untestedVariant));
+    $("untestedVivid").hidden = !vivid;
+    $("untestedWide").hidden = !wideUntested;
+    $("untestedGlow").hidden = !glowUntested;
+    // GR IIIx 1.60 only: 2.20 / 1.70 are covered by the first item, and GR III has tested 柔光 and 菜单排序
+    $("untestedFeatures").hidden = newFirmware || !candidate || !fresh.length;
     $("untestedFeatureNames").textContent = fresh.join("、");
     $("untestedExtension").hidden = !recipeExtension;
     $("untestedBox").checked = false;
@@ -1463,11 +1622,15 @@ function showResult(ok, data) {
 
 function guideForSeries() {
   const s = SERIES.find((x) => x.short === state.template.model) || SERIES[0], iiix = s.short === "GR IIIx";
+  // The project's own firmware version (GR III 2.10 / 2.20, GR IIIx 1.60 / 1.70), not the series default.
+  const ver = state.template.firmware || s.ver, fresh = ver !== s.ver;
   for (const n of document.querySelectorAll("#doneGuide .guide-fw")) n.textContent = s.fw;
-  for (const n of document.querySelectorAll("#doneGuide .guide-ver")) n.textContent = s.ver;
-  $("guideBackDl").href = RICOH_FW + s.zip;
-  $("guideRescueWhy").textContent = iiix ? "（GR IIIx 还没在真机上实测过，一定要备好）" : "（虽然作者已在自己的 GR III 上实际验证成功，但以防万一）";
-  $("guideBackTested").textContent = iiix ? "GR IIIx 上还没实测。" : "已在一台 GR III 上实测。";
+  for (const n of document.querySelectorAll("#doneGuide .guide-ver")) n.textContent = ver;
+  $("guideBackDl").href = RICOH_FW + ((s.zips || {})[ver] || s.zip);
+  // A film on Vivid or 画幅 has not been flashed back on any camera, whatever the older builds did.
+  const newCombo = !!(state.changes[2] && state.changes[2].film) || !!(state.features || {}).wide_ratio;
+  $("guideRescueWhy").textContent = fresh ? `（固件 ${ver} 还没在真机上实测过，一定要备好）` : iiix ? "（GR IIIx 刷回官方尚未实机验证，一定要备好）" : newCombo ? "（一个测试包在一台 GR III 上刷回过；本次配置仍需验证，一定要备好）" : "（虽然作者已在自己的 GR III 上实际验证成功，但以防万一）";
+  $("guideBackTested").textContent = fresh ? `固件 ${ver} 上还没实测。` : iiix ? "GR IIIx 刷回官方尚未实机验证。" : newCombo ? "一个测试包在一台 GR III 上刷回过；本次配置仍需验证。" : "已在一台 GR III 上实测。";
 }
 
 // After-flash checks follow what this build actually changed.
@@ -1482,6 +1645,8 @@ function guideChecks(summary) {
   if (summary.some((x) => x.what === "菜单顺序")) out.push("影像控制菜单的顺序（拍照、视频、RAW 显影都看），选中后风格和名字对得上");
   // 柔光: assign it to an ADJ slot first (it does not take one by itself), then look at the icon and the effect.
   if (summary.some((x) => x.preset === "柔光")) out.push("在「ADJ 模式设定」里把柔光放进一个槽，按 ADJ 看柔光图标清不清楚；关和强各拍一张，看亮处有没有晕开");
+  if (summary.some((x) => x.preset === "日期印记")) out.push("设置页末页打开「日期」，拍 JPEG 和 RAW+JPEG 各一张：右下角有字、时间对，RAW 没被写；再切 16:9 和 65:24 各拍一张");
+  if (summary.some((x) => x.preset === "画幅")) out.push("画幅选 16:9 和 65:24 各拍一张 RAW+JPEG：取景有遮罩和框线，JPEG 是宽幅，RAW 仍是 3:2");
   out.push("卡再格式化一次，删掉更新文件");
   return out;
 }
@@ -1507,9 +1672,7 @@ function setShutdown(value) {
   mutate((c) => { if (value === undefined) delete c.shutdown; else c.shutdown = value; });
 }
 
-const SOON = {
-  date: ["日期印记", "", "计划中", "机内能不能在照片上印日期还没有研究，这里暂时没有可改的内容。"],
-};
+const SOON = {};
 
 // Rail entries. 画幅 and 柔光 are settings of the whole camera, not of a preset (user, 2026-10-24):
 // each has its own page showing how it is used in the camera. A switch can be turned on when the model's
@@ -1523,10 +1686,13 @@ function renderFeature() {
   }
   $("plist").hidden = f !== "ic";
   $("paneIC").hidden = f !== "ic";
-  $("adjustPanel").hidden = f !== "ic";
+  // 调色 feeds the film output, which GR III 2.20 / GR IIIx 1.70 do not have yet.
+  $("adjustPanel").hidden = f !== "ic" || !!(state.project && state.project.capabilities && state.project.capabilities.films === false);
   $("paneShutdown").hidden = f !== "shutdown";
   $("paneRatio").hidden = f !== "ratio";
   $("paneSoft").hidden = f !== "soft";
+  $("paneDate").hidden = f !== "date";
+  $("featDate").hidden = !featureOn("date_stamp");  // not offered until it is tested on a camera
   for (const [name, , id] of CAMERA_FEATURES) {
     const sw = $(id), ready = featureOn(name);
     sw.disabled = !ready;
@@ -1539,6 +1705,21 @@ function renderFeature() {
     /HDF/.test((state.project && state.project.target_body) || "") ? "HDF 机身和普通 GR III 用同一个 2.10 固件；柔光在 HDF 机身上已适配、未实测。" : "";
   $("softBodyNote").textContent = softNote;
   $("softBodyNote").hidden = !softNote;
+  // 画幅 is camera-tested on the standard GR III only; Street, Diary and GR IIIx say so, HDF is refused at generation.
+  // 2.20 / 1.70 do not have it in this version (user, 2026-10-31): the switch stays off and says why.
+  const ratioVariant = (state.project && state.project.camera_variant) || "";
+  const ratioNote = !featureOn("wide_ratio") ? (state.template && /^(2\.20|1\.70)$/.test(state.template.firmware || "") ? "画幅只支持固件 2.10 和 1.60，2.20 和 1.70 这一版暂不支持。" : "") :
+    /HDF/.test((state.project && state.project.target_body) || "") ? "画幅还不支持 HDF 机身，打开后生成时会被拒绝。" :
+    state.template && state.template.model === "GR IIIx" ? "画幅在 GR IIIx 上已适配、未实测：离线核对都通过了，还没有人在 GR IIIx 上刷过，包括刷回官方固件。" :
+    /Street|Diary/.test(ratioVariant) ? "画幅在街拍版、日记版上已适配、未实测：和标准版用同一个固件，还没有人在这两个版本上刷过。" : "";
+  $("ratioBodyNote").textContent = ratioNote;
+  $("ratioBodyNote").hidden = !ratioNote;
+  // 日期印记 has not been on any camera. 2.20 / 1.70 do not have it; HDF is refused with the wide ratios.
+  const dateNote = !featureOn("date_stamp") ? (state.template && /^(2\.20|1\.70)$/.test(state.template.firmware || "") ? "日期印记只支持固件 2.10 和 1.60，2.20 和 1.70 这一版暂不支持。" : "") :
+    /HDF/.test((state.project && state.project.target_body) || "") ? "日期印记要和画幅一起装，画幅还不支持 HDF 机身，打开后生成时会被拒绝。" :
+    "日期印记已适配、未实测：只做过离线模拟，还没有在任何相机上试过。";
+  $("dateBodyNote").textContent = dateNote;
+  $("dateBodyNote").hidden = !dateNote;
   $("paneSoon").hidden = !SOON[f];
   if (SOON[f]) {
     const [title, sub, badge, text] = SOON[f];
@@ -1670,7 +1851,11 @@ function renderShutdown() {
   // Each edition shows its own factory picture (firmware routes: 3 Street, 11 Urban, 12 Diary, 2 normal).
   // Which one an HDF body shows is not verified, so those keep the normal picture and say so.
   const variant = state.project ? state.project.camera_variant || "" : "";
-  const route = { "GR III Street Edition": [3, "Street 版"], "GR III Diary Edition": [12, "Diary 版"], "GR IIIx Urban Edition": [11, "Urban 版"] }[variant] || [2, /HDF/.test(variant) ? "普通版；HDF 机身实际显示哪张未核实" : ""];
+  // GR III 2.20 / GR IIIx 1.70 set the 30th-anniversary style (route 14) on the normal start-up path.
+  const fresh = !!(state.project && state.project.capabilities && state.project.capabilities.new_firmware);
+  const fw = (state.template && state.template.firmware) || "";
+  const route = fresh ? [14, `固件 ${fw} 开机后显示 30 周年画面`]
+    : { "GR III Street Edition": [3, "Street 版"], "GR III Diary Edition": [12, "Diary 版"], "GR IIIx Urban Edition": [11, "Urban 版"] }[variant] || [2, /HDF/.test(variant) ? "普通版；HDF 机身实际显示哪张未核实" : ""];
   $("sdFactoryCap").textContent = "原厂" + (route[1] ? "（" + route[1] + "）" : "");
   const facUrl = state.project ? "/api/factory/" + state.project.input_sha256 + "/shutdown/" + route[0] + ".jpg" : null;
   if (facUrl && fac.dataset.src !== facUrl) {
@@ -1689,6 +1874,16 @@ function renderShutdown() {
   $("btnSdReset").disabled = !edit;
   const note = (t) => el("li", {}, [el("span", { class: "mk", text: "i" }), el("span", { text: t })]);
   const iiix = state.project && state.project.template_id && state.project.template_id.startsWith("gr3x-");
+  if (fresh) {
+    $("sdNotes").replaceChildren(
+      note("普通、Street、Urban、ING、Diary 和 20、30 周年七种关机样式共用这一张图，不扩容。"),
+      note(`固件 ${fw} 正常开机时会把关机样式设成 30 周年，所以七个入口都换成这张图。`),
+      note("不扩容：写进固件里原有的关机图位置，其他资源不动。"),
+      note(`固件 ${fw} 上还没实测：刷后关机看一次，确认显示的是这张图。`),
+      note("可以和图标、预设名一起生成，一次刷机全部生效。"),
+    );
+    return;
+  }
   $("sdNotes").replaceChildren(
     note(iiix ? "普通、Street、Urban、ING、Diary 五种关机样式共用这一张图，不扩容。"
       : "普通、Street、Urban、ING、Diary 五种关机样式共用这一张图，不扩容。新增 Street 路线尚未实机验证。"),
@@ -1849,7 +2044,7 @@ function wire() {
   wireShutdown();
   window.DarkslideAdjust.wire({ get: () => (state.changes[state.sel] || {}).grade, set: (g) => setEdit(state.sel, "grade", g), rerender: renderAll,
     limits: () => window.DarkslideFilm.gradeLimitsFor((state.changes[state.sel] || {}).film) });
-  window.DarkslideFilm.wire(api, toast, { mine: () => samples.mine, scene: () => null, rerender: renderAll, invalidateCheck: invalidateFilmPrepare, setFilm, slotNo: () => slotOf(state.sel).no, allEdits: () => state.changes });
+  window.DarkslideFilm.wire(api, toast, { mine: () => samples.mine, scene: () => null, rerender: renderAll, invalidateCheck: invalidateFilmPrepare, iconReady: filmIconReady, filmsReady, setFilm, slotNo: () => slotOf(state.sel).no, allEdits: () => state.changes });
   const drop = $("drop");
   $("fileInput").addEventListener("change", (e) => e.target.files[0] && importFile(e.target.files[0]));
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
@@ -1894,8 +2089,12 @@ function wire() {
     note: () => {
       if (!orderWrites()) return "GR IIIx 可以先排好、存进工程；写进相机还在适配，生成前要先点「恢复原厂」。";
       // GR IIIx 1.60 writes the order too (same seven tables as GR III 2.10, checked 2026-10-25).
-      if (state.template && state.template.model === "GR IIIx") return "GR IIIx 的菜单表和 GR III 位置、内容都一样；在 GR IIIx 上还没实测。";
+      if (state.template && state.template.model === "GR IIIx") return state.template.firmware === "1.70"
+        ? "GR IIIx 1.70 的菜单表和 GR III 2.20 位置、内容都一样；在 GR IIIx 1.70 上还没实测。"
+        : "GR IIIx 的菜单表和 GR III 位置、内容都一样；在 GR IIIx 上还没实测。";
       const body = (state.project && state.project.target_body) || "";
+      const fw = (state.template && state.template.firmware) || "2.10";
+      if (fw !== "2.10") return /HDF/.test(body) ? `${body} 和普通 GR III 用同一个 ${fw} 固件；菜单顺序在固件 ${fw} 上还没实测。` : `菜单顺序在固件 ${fw} 上还没实测。`;
       return /HDF/.test(body) ? body + " 和普通 GR III 用同一个 2.10 固件，菜单表在同一位置；在 HDF 机身上同样未实测。" : "";
     },
     problem: () => state.orderProblem,
@@ -1988,7 +2187,7 @@ function wire() {
   $("btnOpenRescue").addEventListener("click", () => { $("settingsDialog").close(); show("viewRescue"); window.scrollTo(0, 0); });
   $("btnEditorGuide").addEventListener("click", () => startTour(startEditorGuide));
   $("btnGuideReset").addEventListener("click", async () => {
-    for (const k of ["guide_off", "guide_start_seen", "guide_work_seen", "guide_v1_news_seen", "guide_v2_news_seen", "guide_v3_news_seen", "guide_tour_seen", "guide_editor_seen"]) await setPref(k, false);
+    for (const k of ["guide_off", "guide_start_seen", "guide_work_seen", "guide_v1_news_seen", "guide_v2_news_seen", "guide_v3_news_seen", "guide_v4_news_seen", "guide_tour_seen", "guide_editor_seen"]) await setPref(k, false);
     $("settingsDialog").close();
     toast("指引已重新打开");
     if (!$("viewWork").hidden && state.feature !== "ic") { state.feature = "ic"; renderAll(); }
@@ -2045,9 +2244,9 @@ function renderRescue() {
   document.querySelectorAll(".rescue-model").forEach((n) => { n.textContent = r.model; });
   document.querySelectorAll(".rescue-ver").forEach((n) => { n.textContent = r.ver; });
   document.querySelectorAll(".rescue-file").forEach((n) => { n.textContent = r.file; });
-  $("rescueTested").textContent = r.model === "GR III"
-    ? "同一版本可以重复更新：已在一台 GR III 上实测，改过的 2.10 可以刷入 2.10 机身，也可以再刷回官方 2.10 原件。"
-    : r.model === "GR IIIx"
+  $("rescueTested").textContent = r.model === "GR III" && r.ver === "2.10"
+    ? "一个第五槽、画幅和柔光测试包曾在一台普通 GR III 2.10 上刷回官方一次；本次配置仍需验证。"
+    : r.model === "GR IIIx" && r.ver === "1.60"
     ? "GR IIIx 标准版已有用户实机刷入改过的 1.60 并正常使用；能不能再刷回官方 1.60 原件还没有在真机上验证过，城市版和 HDF 也还没有实测。"
     : r.model + " 属于“已适配 · 未实测”：改过的 " + r.ver + " 能不能刷进机身、能不能再刷回官方 " + r.ver + " 原件，都还没有在真机上验证过。";
 }

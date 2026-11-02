@@ -13,7 +13,7 @@ import sys
 import os
 import json
 import importlib.util
-from . import fwread, models
+from . import fwaddr, fwread, models
 from ._vendor.gr3_base_emulator import OriginalEmulator,DEFAULTS,ZERO_STUBS
 
 MODEL_ID="gr3-210-upstream-neutral-stubbed-v2"
@@ -38,13 +38,13 @@ def _settings(settings):
 def _model(sha, settings=None):
     try: model = models.from_sha(sha)
     except ValueError as exc: raise BaseCurveError(str(exc)) from exc
-    if model == models.GR3X and settings is not None:
+    if models.is_iiix(model) and settings is not None:
         raise BaseCurveError("IIIx 当前只核对中性基础模型")
     return model
 
 
 def _model_id(settings, model=models.GR3):
-    if model == models.GR3X:return "gr3x-160-upstream-neutral-stubbed-v2"
+    if models.is_iiix(model):return "gr3x-160-upstream-neutral-stubbed-v2"
     return MODEL_ID if settings is None else SETTINGS_MODEL_ID
 
 
@@ -117,9 +117,11 @@ def _compute(raw,sha,expected_backend,settings=None):
     try:
         decoded=fwread.unpack(raw)
         payload=fwread.Payload(decoded,models.layout(model))
-        rtos=bytes(payload.p[0x10870:0x10870+0x10b55c0])
-        emu=OriginalEmulator(rtos);values=emu.standard_base(
-            None if settings is None else {SLIDER_OFFSETS[k]:v+4 for k,v in settings.items()})
+        # GR III 2.20 / IIIx 1.70: the same code at relocated addresses (fwaddr), longer RTOS.
+        with fwaddr.firmware(model):
+            rtos=bytes(payload.p[0x10870:0x10870+fwaddr.layout()["rtos_size"]])
+            emu=OriginalEmulator(rtos);values=emu.standard_base(
+                None if settings is None else {SLIDER_OFFSETS[k]:v+4 for k,v in settings.items()})
     except (ValueError,RuntimeError) as error:raise BaseCurveError("原件只读仿真未完成："+str(error)) from error
     if len(values)!=256 or any(type(v) is not int or not 0<=v<=16384 for v in values):
         raise BaseCurveError("基础曲线输出范围或长度不匹配")
@@ -168,7 +170,8 @@ def base_curve(official_bin_path,settings=None):
     library=_backend_library(origin)
     backend=_backend_identity(origin,library)
     local=hashlib.sha256()
-    for source in (Path(__file__),Path(fwread.__file__),Path(models.__file__),Path(__file__).with_name("_vendor")/"gr3_base_emulator.py"):
+    for source in (Path(__file__),Path(fwread.__file__),Path(models.__file__),Path(__file__).with_name("_vendor")/"gr3_base_emulator.py",
+                   Path(__file__).with_name("fwaddr.py"),Path(__file__).with_name("data")/"reloc_220.json"):
         local.update(source.read_bytes())
     key=(sha,_model_id(settings,model),local.hexdigest(),json.dumps(backend,sort_keys=True),
          json.dumps(settings,sort_keys=True))

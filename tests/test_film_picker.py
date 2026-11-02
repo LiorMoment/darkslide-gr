@@ -87,7 +87,7 @@ class StoreFilm(unittest.TestCase):
     def check(self, changes, strict=False):
         return self.store.validate_changes(self.pid, changes, self.template, strict)
 
-    def test_film_choice_is_kept_on_the_four_presets_only(self):
+    def test_film_choice_is_kept_on_the_replaceable_presets_only(self):
         self.assertEqual(self.check({"9": {"film": "gold200"}}, strict=True), {"9": {"film": "gold200"}})
         for key, film in (("7", "gold200"), ("12", "portra400"), ("9", "Gold 200"), ("9", 5)):
             with self.assertRaises(StoreError):
@@ -138,6 +138,18 @@ class StoreFilm(unittest.TestCase):
         for bad in ({"asset": asset, "style": "image", "film": "velvia50"},
                     {"asset": asset, "style": "factory", "text": "G", "film": "gold200"},
                     {"asset": asset, "style": "image", "film": 5}):
+            with self.assertRaises(StoreError):
+                self.check({"9": {"icon": bad}})
+
+    def test_a_film_icon_may_be_a_stand_in_for_the_users_icon(self):
+        # the plate used while the user's icon could not be read keeps its mark, so the page can put the
+        # user's icon back later; only a film icon may carry it, and only as true
+        asset = self.store.put_asset(self.pid, icon_png(), expect_icon=True)["asset"]
+        ok = {"9": {"icon": {"asset": asset, "style": "image", "film": "gold200", "fallback": True}}}
+        self.assertEqual(self.check(ok, strict=True), ok)
+        for bad in ({"asset": asset, "style": "image", "fallback": True},
+                    {"asset": asset, "style": "image", "film": "gold200", "fallback": False},
+                    {"asset": asset, "style": "image", "film": "gold200", "fallback": 1}):
             with self.assertRaises(StoreError):
                 self.check({"9": {"icon": bad}})
 

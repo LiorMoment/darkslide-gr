@@ -1,4 +1,4 @@
-"""Independent GR III 2.10 / GR IIIx 1.60 menu-order readback; no firmware writer imports.
+"""Independent GR III 2.10 / 2.20 and GR IIIx 1.60 / 1.70 menu-order readback; no firmware writer imports.
 
 Requests use stable editor slot IDs, never display rows. verify_tables checks
 only the seven tables and is a component of combined verification. The stricter
@@ -19,6 +19,21 @@ DEFAULT_VIDEO = (1, 2, 3, 5, 6, 12, 7, 8, 9, 11)
 STILL_OFFSETS = (0xB69A94, 0xB6983C, 0xB69A0C)
 VIDEO_OFFSETS = (0xB69AA4, 0xB69A38, 0xB69BDC)
 RAW_OFFSET = 0xB6B1F8
+# GR III 2.20 / GR IIIx 1.70 decoded payloads (same table bytes, offsets moved by the rebuilt
+# main system; the factory bytes are still compared below before anything is accepted).
+PAYLOAD_SHA256_220 = '5b475fcc434dec0f12e7956b02b5b38959d599b7a4ff90486263c46816a21b6d'
+IIIX_PAYLOAD_SHA256_170 = '1129b9289b3cc68ab6f407a87d60db750483cc5ae41a6609596f6fe676b14521'
+PAYLOAD_SIZE_220 = 59798532
+STILL_OFFSETS_220 = (0xB693BC, 0xB69164, 0xB69334)
+VIDEO_OFFSETS_220 = (0xB693CC, 0xB69360, 0xB69504)
+RAW_OFFSET_220 = 0xB6AB20
+
+
+def _layouts():
+    """payload SHA-256 -> (size, still, video, raw), read when called."""
+    old = (PAYLOAD_SIZE, STILL_OFFSETS, VIDEO_OFFSETS, RAW_OFFSET)
+    new = (PAYLOAD_SIZE_220, STILL_OFFSETS_220, VIDEO_OFFSETS_220, RAW_OFFSET_220)
+    return {PAYLOAD_SHA256: old, IIIX_PAYLOAD_SHA256: old, PAYLOAD_SHA256_220: new, IIIX_PAYLOAD_SHA256_170: new}
 _RAW_ENUM = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6,
              12: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 12}
 
@@ -49,23 +64,26 @@ def validate_request(request):
 
 
 def _reference(original, candidate):
-    _need(type(original) is bytes and len(original) == PAYLOAD_SIZE and
-          hashlib.sha256(original).hexdigest() in (PAYLOAD_SHA256, IIIX_PAYLOAD_SHA256),
-          'Expected the immutable original GR III 2.10 or GR IIIx 1.60 decoded payload')
+    _need(type(original) is bytes, 'Expected the immutable original decoded payload')
+    layout = _layouts().get(hashlib.sha256(original).hexdigest())
+    _need(layout is not None and len(original) == layout[0],
+          'Expected the immutable original GR III 2.10 / 2.20 or GR IIIx 1.60 / 1.70 decoded payload')
     _need(type(candidate) is bytes and len(candidate) == len(original),
           'Candidate payload size or type differs')
+    return layout[1:]
 
 
-def _compare_tables(original, candidate, request):
+def _compare_tables(original, candidate, request, offsets=None):
     """Pure comparator for tests; public entry points additionally pin the source."""
+    still_offsets, video_offsets, raw_offset = offsets or (STILL_OFFSETS, VIDEO_OFFSETS, RAW_OFFSET)
     still, video = validate_request(request)
     _need(type(original) is bytes and type(candidate) is bytes and
           len(original) == len(candidate), 'Payload size or type differs')
     specs = [(o, bytes(s+10 for s in DEFAULT_STILL), bytes(s+10 for s in still))
-             for o in STILL_OFFSETS]
+             for o in still_offsets]
     specs += [(o, bytes(s+10 for s in DEFAULT_VIDEO), bytes(s+10 for s in video))
-              for o in VIDEO_OFFSETS]
-    specs.append((RAW_OFFSET, bytes(range(1,13)), bytes(_RAW_ENUM[s] for s in still)))
+              for o in video_offsets]
+    specs.append((raw_offset, bytes(range(1,13)), bytes(_RAW_ENUM[s] for s in still)))
     spans, changed = [], 0
     for start, old, wanted in sorted(specs):
         end = start+len(old)
@@ -86,8 +104,8 @@ verified_spans are fixed and returned only after their actual bytes pass. The
 combined verifier must independently authorize/check all other modified spans,
 the checksum, the container, and overlap with other features.
 """
-    _reference(original, candidate)
-    return _compare_tables(original, candidate, request)
+    offsets = _reference(original, candidate)
+    return _compare_tables(original, candidate, request, offsets)
 
 
 def _sum32(data):
@@ -95,9 +113,9 @@ def _sum32(data):
     return sum(word[0] for word in struct.iter_unpack('<I', data)) & 0xFFFFFFFF
 
 
-def _compare_sorting_only(original, candidate, request, finalized):
+def _compare_sorting_only(original, candidate, request, finalized, offsets=None):
     _need(type(finalized) is bool, 'Finalized must be a boolean')
-    result = _compare_tables(original, candidate, request)
+    result = _compare_tables(original, candidate, request, offsets)
     cursor = 0
     for start,end in result['verified_spans']:
         _need(original[cursor:start] == candidate[cursor:start],
@@ -122,5 +140,5 @@ finalized=True permits only the final four-byte checksum to change, requires
 zero 32-bit sums for both payloads, and still rejects other modifications.
 No output is created, encoded, downloaded, or approved for camera installation.
 """
-    _reference(original, candidate)
-    return _compare_sorting_only(original, candidate, request, finalized)
+    offsets = _reference(original, candidate)
+    return _compare_sorting_only(original, candidate, request, finalized, offsets)

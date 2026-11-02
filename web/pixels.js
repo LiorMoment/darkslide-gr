@@ -21,7 +21,9 @@
       } catch (e) { /* a JPEG it does not read (CMYK, arithmetic coding...): the browser's */ }
       if (px && (!img || (px.w === img.naturalWidth && px.h === img.naturalHeight))) return px;
     }
-    const bmp = await createImageBitmap(blob, { colorSpaceConversion: "default", premultiplyAlpha: "none", imageOrientation: "from-image" });
+    // the browser's own decode error is English text ("The source image could not be decoded."): say it our way
+    const bmp = await createImageBitmap(blob, { colorSpaceConversion: "default", premultiplyAlpha: "none", imageOrientation: "from-image" })
+      .catch(() => { throw new Error("图片打不开"); });
     if (img && (bmp.width !== img.naturalWidth || bmp.height !== img.naturalHeight)) {
       bmp.close();
       throw new Error("图片打不开");

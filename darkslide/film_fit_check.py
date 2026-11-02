@@ -15,7 +15,7 @@ def check_cube(data, model, contract, envelope):
     """data: .cube bytes. Returns dict(writable, violations, reason, level, de_mean)."""
     try:
         profile, report = film_fit.fit_cube(data, CHECK_ID, contract, envelope, model_id=model.id)
-        if model == models.GR3X:
+        if models.is_iiix(model):
             from .gr3x_camera_preview import installed_fit_report
             report = installed_fit_report(data, contract, profile, report, envelope)
     except (film_fit.FilmFitError, FilmRequestError, ValueError) as exc:

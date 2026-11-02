@@ -18,6 +18,17 @@ V210 = dict(
     string_array_ram=0x55002BAC, languages=21, string_ids=785,
 )
 V210_INPUT_SHA256 = "d6a3c9c288d784080e7b283222ecdd8752adfeed6faa36dab44f73115354bfd4"
+# GR III 2.20 / GR IIIx 1.70 (rebuilt main system, 2026-10-21). RTOS +0x140 bytes, initialized data
+# +0x40; the icon table and ICONBIN are unchanged, ICONBIN only moved with the longer RTOS record; the
+# string array moved +8 because the shutdown-image request table before it gained two entries.
+# Checked 2026-10-25: all 670 icons and 21 x 784 strings read back identical to 2.10.
+V220 = dict(
+    payload_sha256="5b475fcc434dec0f12e7956b02b5b38959d599b7a4ff90486263c46816a21b6d",
+    rtos_va=0x53000000, rtos_body=0x10870, rtos_size=0x10B5700,
+    data_lma=0x5407B640, data_ram=0x55000000, data_size=0x3A0C0,
+    icon_index_ram=0x550020FC, icon_body=0x2128610, icon_size=18354964, icon_max_id=670,
+    string_array_ram=0x55002BB4, languages=21, string_ids=785,
+)
 LANG = {"ja": 0, "en": 1, "zh-TW": 18, "zh-CN": 19}
 
 

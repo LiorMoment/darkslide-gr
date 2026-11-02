@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "template_id": "gr3x-1.70-reviewed-1",
+  "note": "详细设置菜单项的开放状态。factory=相机菜单本来就有；menu=本工具可开放固件里隐藏的项；closed=当前研究做不到。颗粒效果未经实机验证。",
+  "grain": {
+    "3": "factory",
+    "4": "factory",
+    "5": "factory",
+    "6": "factory",
+    "12": "menu"
+  },
+  "grain_note": {
+    "12": "只完成离线核对，IIIx 颗粒效果和持久化未实机验证"
+  }
+}

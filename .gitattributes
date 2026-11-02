@@ -10,3 +10,12 @@
 
 # Precompiled code resource is SHA-pinned as bytes on every platform.
 darkslide/data/film_arm_v1.json -text
+darkslide/data/film_arm_220_v1.json -text
+darkslide/data/film_arm_vivid5_v1.json -text
+darkslide/data/film_arm_vivid5_220_v1.json -text
+darkslide/film_vivid_fifth_reference.json -text
+darkslide/film_vivid_fifth_reference_220.json -text
+darkslide/film_inplace_reference_220.json -text
+darkslide/film_inplace_ranges_220.json -text
+darkslide/data/reloc_220.json -text
+darkslide/soft_glow_windows_220.json -text

@@ -108,7 +108,7 @@ class Migration(unittest.TestCase):
         self.source.put_film_lut(self.pid,CUBE,'identity.cube')
         self.bid='b_123456789abc';folder=self.source.root/'builds'/self.bid;folder.mkdir(parents=True)
         (folder/self.model.filename).write_bytes(b'historical output')
-        write_json(folder/'manifest.json',dict(build_id=self.bid,project_id=self.pid,input_sha256=self.model.input_sha,output_filename=self.model.filename,output_sha256=L.digest(b'historical output'),checks=[{'ok':True}],created_at='fixture'))
+        write_json(folder/'manifest.json',dict(build_id=self.bid,project_id=self.pid,input_sha256=self.model.input_sha,output_filename=self.model.filename,output_sha256=L.digest(b'historical output'),checks=[{'ok':True}],features=['name'],created_at='fixture'))
 
     def test_copy_idempotence_original_preservation_and_history_download(self):
         before=L.tree(self.source.root)
@@ -125,6 +125,39 @@ class Migration(unittest.TestCase):
         self.assertEqual(response.body,b'historical output')
         self.assertIn(self.model.filename,str(response.headers))
         self.assertEqual(len(self.dest.builds()),1)
+
+    def test_imported_build_with_uncertain_or_held_features_stays_stored_but_cannot_download(self):
+        source_manifest = self.source.root / 'builds' / self.bid / 'manifest.json'
+        bad_list = '保存的构建缺少可识别的功能清单，暂时不能下载固件'
+        held = '保存的构建包含尚未完成更新和恢复验证的功能，暂时不能下载固件'
+        cases = ((None, bad_list), ([], bad_list), (['date_stamp'], held), (['name', 'date_stamp'], held))
+        for index, (features, message) in enumerate(cases):
+            with self.subTest(features=features):
+                record = json.loads(source_manifest.read_text())
+                if features is None:
+                    record.pop('features', None)
+                else:
+                    record['features'] = features
+                write_json(source_manifest, record)
+                before = L.tree(self.source.root)
+                destination = Store(self.root / ('blocked_%d' % index))
+                plan = L.import_store(destination, self.source.root)
+                result = L.import_store(destination, self.source.root, apply=True,
+                                        expected_digest=plan['source_digest'])
+                self.assertEqual(L.tree(self.source.root), before)
+                imported = destination.build_path(result['builds'][0]['id'], 'manifest.json')
+                saved_record = json.loads(imported.read_text())
+                self.assertEqual(saved_record.get('features'), features)
+                self.assertEqual('features' in saved_record, features is not None)
+                self.assertEqual(saved_record['build_id'], result['builds'][0]['id'])
+                self.assertEqual(saved_record['project_id'], result['projects'][0]['id'])
+                saved_bytes = imported.parent / self.model.filename
+                self.assertEqual(saved_bytes.read_bytes(), b'historical output')
+                with self.assertRaises(server.ApiError) as error:
+                    server.api_build_firmware(request(SimpleNamespace(store=destination)), result['builds'][0]['id'])
+                self.assertEqual((error.exception.status, str(error.exception)), (422, message))
+                self.assertEqual(saved_bytes.read_bytes(), b'historical output')
+                self.assertEqual(json.loads(imported.read_text()), saved_record)
 
     def test_changed_source_conflict_symlink_and_wrong_build_refused(self):
         plan=L.import_store(self.dest,self.source.root)

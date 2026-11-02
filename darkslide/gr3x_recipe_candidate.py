@@ -12,6 +12,8 @@ def build(official, edits, template, *, profiles=None, experimental_recipe=False
     if type(edits) is not list or any(type(e) is not dict for e in edits):
         raise ValueError('typed edits required')
     requested=[e for e in edits if e.get('kind')=='film']
+    if any(e.get('slot') == 2 for e in requested):
+        raise ValueError('鲜艳胶片暂不支持照片配方扩展，请使用不扩容生成')
     ordinary=[e for e in edits if e.get('kind')!='film']
     resolved=film_writer.resolve_profiles(requested,profiles,models.GR3X.id)
     source=package.Package.read(official,models.GR3X.id)

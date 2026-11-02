@@ -658,7 +658,7 @@ class Routes(Served):
         self.assertTrue(res.json()["error"].startswith("读取固件失败："))
 
     def put_build(self, output=b"generated-output"):
-        manifest = dict(project_id="p_000000000000", input_sha256=self.sha, checks=[dict(ok=True)], output_sha256=sha256(output), created_at="2026-10-11T00:00:00")
+        manifest = dict(project_id="p_000000000000", input_sha256=self.sha, checks=[dict(ok=True)], features=["name"], output_sha256=sha256(output), created_at="2026-10-11T00:00:00")
         return self.store.put_build(output, manifest)["build_id"], output
 
     def test_build_firmware_download(self):
@@ -749,7 +749,7 @@ class Routes(Served):
     def test_generate_success_stores_the_build(self):
         pid = self.new_project()
         output = b"pretend-generated-firmware"
-        manifest = dict(project_id=pid, input_sha256=self.sha, checks=[dict(ok=True)], output_sha256=sha256(output), created_at="2026-10-11T00:00:00")
+        manifest = dict(project_id=pid, input_sha256=self.sha, checks=[dict(ok=True)], features=["name"], output_sha256=sha256(output), created_at="2026-10-11T00:00:00")
         with mock.patch.object(generate, "run", return_value=(output, manifest)) as run:
             value = self.assertJson(self.call("POST", "/api/projects/%s/generate" % pid), 200)
         store, project, template, official = run.call_args.args

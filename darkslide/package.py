@@ -151,7 +151,7 @@ class Package:
         trailer = Trailer.read(wire[trailer_start:])
         demand((trailer.project, trailer.sentinel, trailer.operation) ==
                (model.project, 0xa55a5aa5, 2), 'Update identity is unsupported')
-        demand(trailer.image_length == EXPECTED_LENGTH, '解码数据长度不受支持')
+        demand(trailer.image_length == (model.payload_size if models.is_220(model) else EXPECTED_LENGTH), '解码数据长度不受支持')
         demand(all(wire[index:index + 4] == model.version for index in (56, 80)), 'Version fields differ')
         demand(word_total(wire) == 0, '整文件校验和不为零')
         end = HEADER_BYTES + trailer.stream_length

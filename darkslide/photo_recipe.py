@@ -49,15 +49,24 @@ def _json(value):
                       separators=(',', ':'), allow_nan=False).encode('utf-8')
 
 
-def _profile(profile, slot):
+def _model(model_id):
+    """The IIIx firmware a packet is for: 1.60 unless the caller names its project's model (1.70).
+    Only GR IIIx: the packet ABI is the IIIx film core."""
+    model = models.get(models.GR3X.id if model_id is None else model_id)
+    _need(models.is_iiix(model), '配方不适用于当前 IIIx 处理链')
+    return model
+
+
+def _profile(profile, slot, model_id=None):
     _need(type(profile) is dict, '配方必须是对象')
     validate_request(dict(kind='film', slot=slot, film=profile.get('id')))
-    return validate_profile(profile, profile['id'], models.GR3X.id)
+    return validate_profile(profile, profile['id'], _model(model_id).id)
 
 
-def encode(profile, slot):
-    """Freeze numeric data AND original profile/provenance, not a catalog key."""
-    p = _profile(profile, slot)
+def encode(profile, slot, model_id=None):
+    """Freeze numeric data AND original profile/provenance, not a catalog key.
+    model_id: the project's IIIx model (default 1.60); the profile must be for exactly that model."""
+    p = _profile(profile, slot, model_id)
     origin = p.get('provenance', {})
     if (isinstance(origin, dict) and origin.get('project') in
             ('idontknownihil/gr3-film-mods', 'andreavolpato/spektrafilm')
@@ -68,7 +77,7 @@ def encode(profile, slot):
         p['data_notices'] = {name: (folder/name).read_text(encoding='utf-8')
                              for name in ('README.md','SPEKTRAFILM_LICENSE.txt','CHANGELOG.txt')}
     core = CORE.pack(*(v for field in FIELDS for row in p[field] for v in row))
-    meta = _json(dict(abi=ABI, official_sha256=models.GR3X.input_sha,
+    meta = _json(dict(abi=ABI, official_sha256=_model(model_id).input_sha,
                       scope='darkslide-film-core',
                       profile={k: v for k, v in p.items() if k not in FIELDS}))
     _need(len(meta) <= MAX_META, '配方说明超过容量')
@@ -76,8 +85,9 @@ def encode(profile, slot):
     return body + struct.pack('<I', zlib.crc32(body))
 
 
-def decode(packet):
-    """Reject unknown ABI, corruption, ambiguous JSON and unsafe numeric data."""
+def decode(packet, model_id=None):
+    """Reject unknown ABI, corruption, ambiguous JSON and unsafe numeric data.
+    model_id: the IIIx model the packet must have been made for (default 1.60)."""
     _need(type(packet) is bytes and HEADER.size + CORE.size + 4 <= len(packet) <= MAX_PACKET,
           '配方长度错误')
     magic, version, abi, slot, flags, ncore, nmeta = HEADER.unpack_from(packet)
@@ -94,7 +104,7 @@ def decode(packet):
         raise ValueError('配方说明无法读取') from error
     _need(type(meta) is dict and set(meta) == {'abi', 'official_sha256', 'scope', 'profile'},
           '配方说明字段不匹配')
-    _need(meta['abi'] == ABI and meta['official_sha256'] == models.GR3X.input_sha and
+    _need(meta['abi'] == ABI and meta['official_sha256'] == _model(model_id).input_sha and
           meta['scope'] == 'darkslide-film-core', '配方不适用于当前 IIIx 处理链')
     p = meta['profile']
     _need(type(p) is dict and not any(k in p for k in FIELDS), '配方数值重复')
@@ -102,7 +112,7 @@ def decode(packet):
     p = dict(p, look_matrix_q13=[list(values[i:i+3]) for i in range(0, 9, 3)],
              curves_u14=[list(values[i:i+256]) for i in range(9, 777, 256)],
              post_matrix_q512=[list(values[i:i+3]) for i in range(777, 786, 3)])
-    p = _profile(p, slot)
+    p = _profile(p, slot, model_id)
     return dict(slot=slot, profile=p, abi=ABI, scope='darkslide-film-core',
                 packet_sha256=hashlib.sha256(packet).hexdigest(),
                 numeric_sha256=hashlib.sha256(packet[HEADER.size:HEADER.size+CORE.size]).hexdigest())

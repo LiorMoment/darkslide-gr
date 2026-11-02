@@ -20,7 +20,7 @@ from .film_requests import FilmRequestError, validate_batch
 from .film_profiles import validate_profile
 from .film_patch_plan import PlanImage, _branch
 from .film_four_validation import fit_knots, expand_knots, ORIGINAL_SHA
-from .film_writer import _init_tail, SLOT_INFO, HDR_FIXES
+from .film_writer import _init_tail, SLOT_INFO, HDR_FIXES, hdr_fixes
 from .film_standard_proxy import derive as proxy_derive, mask_slots
 from .film_arm_assemble import assemble
 from .film_scheme_c import (
@@ -29,6 +29,8 @@ from .film_scheme_c import (
 )
 from ._vendor.gr3_four_curve_hooks import point_source
 from ._vendor.gr3_film_hooks import csp_entry
+from .fwaddr import A as fa
+from . import fwaddr
 
 LAYOUT = 'standard_sliders_extension_experiment_v1'
 ROM_BEGIN = 0x540B55C0
@@ -59,9 +61,9 @@ def _envelope(value):
     if type(value) is not dict:
         raise FilmRequestError('需要同一官方原件的数值边界')
     if (type(value.get('schema')) is not int or value['schema'] != 1
-            or value.get('model') != 'GR III' or value.get('firmware') != '2.10'
+            or value.get('model') != 'GR III' or value.get('firmware') != fwaddr.firmware_name('2.10')
             or value.get('model_id') != ENVELOPE_ID
-            or value.get('payload_sha256') != ORIGINAL_SHA):
+            or value.get('payload_sha256') != fwaddr.payload_sha(ORIGINAL_SHA)):
         raise FilmRequestError('原厂边界身份不匹配')
     if any(type(value.get(k)) is not int for k in ENVELOPE_FIELDS):
         raise FilmRequestError('原厂边界必须为完整整数标量')
@@ -108,11 +110,11 @@ def _numeric(profile, envelope):
 def slot_layout(slot):
     if type(slot) is not int or slot not in (8, 9, 10, 11):
         raise FilmRequestError('胶片位置无效')
-    base = DATA_BASE + (slot - 8) * STRIDE
+    base = fa(DATA_BASE) + (slot - 8) * STRIDE
     return dict(slot=slot, record=base, matrix=base + 84,
                 knots=(base + 104, base + 172, base + 240),
-                lookup_entry=LOOKUP + (slot - 8) * 16,
-                post_entry=POST + (slot - 8) * 24)
+                lookup_entry=fa(LOOKUP) + (slot - 8) * 16,
+                post_entry=fa(POST) + (slot - 8) * 24)
 
 
 def _bounded_original(callback):
@@ -124,9 +126,9 @@ def _bounded_original(callback):
                 or not 0 < size <= 512 or not 0 <= address < address + size <= 2**32):
             raise FilmRequestError('原件读取参数无效')
         end = address + size
-        if not any(a <= address < end <= b for a, b in (ORIGINAL_RTOS, ORIGINAL_DATA)):
+        if not any(a <= address < end <= b for a, b in (fa(ORIGINAL_RTOS), fa(ORIGINAL_DATA))):
             raise FilmRequestError('仅允许原 RTOS 与原数据别名读取')
-        a, b = EXCLUDED_TABLE
+        a, b = fa(EXCLUDED_TABLE)
         if address < b and a < end:
             raise FilmRequestError('旧仲裁表不属于胶片空间')
         blob = callback(address, size)
@@ -137,7 +139,7 @@ def _bounded_original(callback):
 
 
 def _base_result(mask):
-    return dict(layout=LAYOUT, old_windows=(), append_address=ROM_BEGIN,
+    return dict(layout=LAYOUT, old_windows=(), append_address=fa(ROM_BEGIN),
                 origin_payload_sha256=ORIGINAL_SHA, origin_payload_bytes=59718388,
                 rtos_old_length=0x10B55C0,
                 rtos_new_length=0x10B55C0 + (4096 if mask else 0),
@@ -183,27 +185,27 @@ def plan(read, edits, profiles, envelope):
         return result
     source = _Source(_bounded_original(read))
     read = source.read
-    for at, word in MODE_CHANGE_WORDS:
+    for at, word in fa(MODE_CHANGE_WORDS):
         if read(at, 4) != struct.pack('<I', word):
             raise FilmRequestError('原厂模式切换缓存合同不匹配')
-    stock, tail = read(STANDARD, 84), _init_tail(read)
-    if read(0x536DD464, 4) != struct.pack('<I', 0xE89DAFF8):
+    stock, tail = read(fa(STANDARD), 84), _init_tail(read)
+    if read(fa(0x536DD464), 4) != struct.pack('<I', 0xE89DAFF8):
         raise FilmRequestError('原厂fill返回不匹配')
 
     append = bytearray(APPEND_SIZE)
     append_spans, code = [], []
-    cursor = ROM_BEGIN
+    cursor = fa(ROM_BEGIN)
 
     def append_write(address, blob):
         if type(address) is not int or type(blob) is not bytes or not blob or len(blob) > 512:
             raise FilmRequestError('新增区写入必须为有界不可变字节')
         end = address + len(blob)
-        if not ROM_BEGIN <= address < end <= USED_END:
+        if not fa(ROM_BEGIN) <= address < end <= fa(USED_END):
             raise FilmRequestError('新增区写入越界')
         if any(address < b and a < end for a, b in append_spans):
             raise FilmRequestError('新增区写入重叠')
         append_spans.append((address, end))
-        append[address - ROM_BEGIN:end - ROM_BEGIN] = blob
+        append[address - fa(ROM_BEGIN):end - fa(ROM_BEGIN)] = blob
 
     def allocate(role, src):
         nonlocal cursor
@@ -212,7 +214,7 @@ def plan(read, edits, profiles, envelope):
             raise FilmRequestError('新增区代码顺序不匹配')
         at = cursor
         blob = assemble(src, at)
-        if not blob or len(blob) % 4 or at + len(blob) > DATA_BASE:
+        if not blob or len(blob) % 4 or at + len(blob) > fa(DATA_BASE):
             raise FilmRequestError('胶片代码超出新增只读区')
         append_write(at, blob)
         code.append(dict(role=role, address=at, size=len(blob)))
@@ -220,38 +222,38 @@ def plan(read, edits, profiles, envelope):
         return at
 
     for role, src in (('fill', _fill_source(mask)), ('dirty', _dirty_source(mask)),
-                      ('point', point_source()), ('getter', _getter_source(LOOKUP)),
-                      ('post', _post_source(POST))):
+                      ('point', point_source()), ('getter', _getter_source(fa(LOOKUP))),
+                      ('post', _post_source(fa(POST)))):
         allocate(role, src)
     point = next(r['address'] for r in code if r['role'] == 'point')
-    allocate('composer', _composer_source(LOOKUP, point))
+    allocate('composer', _composer_source(fa(LOOKUP), point))
     addresses = {r['role']: r['address'] for r in code}
     guards = [
-        (0x536DD450, 0x159632D0, _branch(0x536DD450, addresses['fill'])),
-        (0x536DD024, 0xE5C4100E, _branch(0x536DD024, addresses['dirty'])),
-        (0x536E4774, _branch(0x536E4774, 0x536E4720, link=True),
-         _branch(0x536E4774, addresses['post'], link=True)),
-        (0x536E87C4, _branch(0x536E87C4, 0x536EEDF0, link=True),
-         _branch(0x536E87C4, addresses['getter'], link=True)),
-        (0x536E87C8, 0xE51B3044, _branch(0x536E87C8, addresses['composer'])),
+        (fa(0x536DD450), 0x159632D0, _branch(fa(0x536DD450), addresses['fill'])),
+        (fa(0x536DD024), 0xE5C4100E, _branch(fa(0x536DD024), addresses['dirty'])),
+        (fa(0x536E4774), _branch(fa(0x536E4774), fa(0x536E4720), link=True),
+         _branch(fa(0x536E4774), addresses['post'], link=True)),
+        (fa(0x536E87C4), _branch(fa(0x536E87C4), fa(0x536EEDF0), link=True),
+         _branch(fa(0x536E87C4), addresses['getter'], link=True)),
+        (fa(0x536E87C8), 0xE51B3044, _branch(fa(0x536E87C8), addresses['composer'])),
     ]
     if mask & 4:
-        guards.extend(HDR_FIXES)
+        guards.extend(hdr_fixes())
     proxy_words, proxy_codes, proxy_meta = proxy_derive(
         read, [e['slot'] for e in requests], allocate)
     if proxy_codes:
         raise FilmRequestError('未授权改变原位置的额外代码')
     guards.extend(proxy_words)
-    if tuple(r['role'] for r in code) != CODE_ROLES or cursor - ROM_BEGIN != CODE_BYTES:
+    if tuple(r['role'] for r in code) != CODE_ROLES or cursor - fa(ROM_BEGIN) != CODE_BYTES:
         raise FilmRequestError('新增区代码尺寸合同不匹配')
     allowed = [(a, a + 4) for a, _, _ in guards]
     aliases = [i for e in requests for i in SLOT_INFO[e['slot']][1]]
-    allowed.extend((PRIMARY + 4 * i, PRIMARY + 4 * i + 4) for i in aliases)
+    allowed.extend((fa(PRIMARY) + 4 * i, fa(PRIMARY) + 4 * i + 4) for i in aliases)
     # Every original write is a word and separate from the new owned buffer.
     for a, b in allowed:
-        if not any(x <= a < b <= y for x, y in (ORIGINAL_RTOS, ORIGINAL_DATA)):
+        if not any(x <= a < b <= y for x, y in (fa(ORIGINAL_RTOS), fa(ORIGINAL_DATA))):
             raise FilmRequestError('旧补丁写入越界')
-        x, y = EXCLUDED_TABLE
+        x, y = fa(EXCLUDED_TABLE)
         if a < y and x < b:
             raise FilmRequestError('旧仲裁表禁止写入')
     image = PlanImage(read, tuple(allowed), max_bytes=8192)
@@ -270,7 +272,7 @@ def plan(read, edits, profiles, envelope):
         append_write(r['lookup_entry'], struct.pack('<4I', r['record'], *r['knots']))
         append_write(r['post_entry'], csp_entry(r['record'], p['post_matrix_q512']))
         for i in SLOT_INFO[e['slot']][1]:
-            image.write(PRIMARY + 4 * i, struct.pack('<I', r['record']))
+            image.write(fa(PRIMARY) + 4 * i, struct.pack('<I', r['record']))
         records.append(dict(r, film=e['film'], aliases=SLOT_INFO[e['slot']][1]))
         compression_errors.append(dict(slot=e['slot'], channels=errors[e['slot']]))
     old_windows = image.seal()
@@ -278,9 +280,9 @@ def plan(read, edits, profiles, envelope):
     result.update(old_windows=old_windows, append_bytes=bytes(append),
                   selected_slots=tuple(e['slot'] for e in requests), records=tuple(records),
                   compression_errors=tuple(compression_errors), code_regions=tuple(code),
-                  code_bytes=CODE_BYTES, code_span=cursor - ROM_BEGIN,
-                  data_base=DATA_BASE, lookup_address=LOOKUP, post_address=POST,
-                  used_end=USED_END, append_unused_bytes=ROM_END - USED_END,
+                  code_bytes=CODE_BYTES, code_span=cursor - fa(ROM_BEGIN),
+                  data_base=fa(DATA_BASE), lookup_address=fa(LOOKUP), post_address=fa(POST),
+                  used_end=fa(USED_END), append_unused_bytes=fa(ROM_END) - fa(USED_END),
                   proxy=proxy_meta, numeric_gate=limits,
                   source_regions=tuple((a, n) for a, n in source.regions))
     return result
@@ -291,7 +293,7 @@ def official_origin():
     return dict(schema=1, model='GR III', firmware='2.10',
                 official_sha256='d6a3c9c288d784080e7b283222ecdd8752adfeed6faa36dab44f73115354bfd4',
                 payload_sha256=ORIGINAL_SHA, payload_bytes=59718388,
-                rtos_body=0x10870, rtos_va=0x53000000,
+                rtos_body=0x10870, rtos_va=fa(0x53000000),
                 rtos_old_length=0x10B55C0, append_file_offset=0x10C5E30)
 
 

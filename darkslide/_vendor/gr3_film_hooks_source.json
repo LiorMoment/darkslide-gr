@@ -13,7 +13,8 @@
   "changes": [
     "Only blocked curve-switch and post-matrix functions selected; no getter/knot fitter/whole writer/codec imported.",
     "Explicit exception replaces removable csp_entry assertion. App validation rejects noninteger post coefficients before calling.",
-    "fill_src Bleach pointer-set uses existing full 256-point library9..11 rather than knot table; misleading knot comment corrected."
+    "fill_src Bleach pointer-set uses existing full 256-point library9..11 rather than knot table; misleading knot comment corrected.",
+    "Firmware addresses go through fwaddr.A so the same source serves GR III 2.20 / IIIx 1.70 (LiorMoment, 2026-10-26); 2.10 / 1.60 output unchanged."
   ],
   "modifier": "LiorMoment",
   "scope": "Four original replacement modes; no Vivid, RAW NR, icons, names, GPL codec or GR IV data",

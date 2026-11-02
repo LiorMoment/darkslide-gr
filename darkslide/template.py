@@ -11,6 +11,9 @@ EDITABLE = ("test", "open")
 # grain: "factory" = the camera menu already has it, "menu" = this tool can
 # open the hidden item, "closed" = not possible with the current research.
 GRAIN_STAGES = ("closed", "factory", "menu")
+# Template id -> detail sidecar (other ids keep the GR III 2.10 sidecar, as before).
+DETAIL_FILES = {"gr3x-1.60-reviewed-1": "gr3x_v160.detail.json", "gr3-2.20-reviewed-1": "gr3_v220.detail.json",
+                "gr3x-1.70-reviewed-1": "gr3x_v170.detail.json"}
 
 
 class TemplateError(ValueError):
@@ -56,7 +59,7 @@ def load_detail(template, name=None):
     """Detail-menu stages live in a sidecar file (<template>.detail.json) so the
     main template keeps exactly the fields the pinned generation core accepts."""
     name = name or template["id"]
-    path = TEMPLATE_ROOT / (name if name.endswith(".json") else ("gr3x_v160.detail.json" if template["id"] == "gr3x-1.60-reviewed-1" else "gr3_v210.detail.json"))
+    path = TEMPLATE_ROOT / (name if name.endswith(".json") else DETAIL_FILES.get(template["id"], "gr3_v210.detail.json"))
     if not path.exists():
         return dict(schema=1, template_id=template["id"], grain={}, grain_note={})
     value = json.loads(path.read_text(encoding="utf-8"))

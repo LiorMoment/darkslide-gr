@@ -16,7 +16,10 @@ from .film_requests import FILM_LAYOUT, FilmRequestError
 FITTER_ID = "darkslide-film-fit-v2"
 
 BASE_MODELS = {models.GR3.id: "gr3-210-upstream-neutral-stubbed-v2",
-               models.GR3X.id: "gr3x-160-upstream-neutral-stubbed-v2"}
+               models.GR3X.id: "gr3x-160-upstream-neutral-stubbed-v2",
+               # Same emulated Standard base (identical values, checked 2026-10-26), relocated addresses.
+               models.GR3_220.id: "gr3-210-upstream-neutral-stubbed-v2",
+               models.GR3X_170.id: "gr3x-160-upstream-neutral-stubbed-v2"}
 IIIX_FITTER_ID = "darkslide-film-fit-v2-iiix-knots33"
 
 
@@ -28,7 +31,7 @@ def contract_model(contract, model_id=None):
     """
     if type(contract) is not dict:
         raise FilmFitError("相机基础模型格式不符")
-    found = next((m for m in (models.GR3, models.GR3X)
+    found = next((m for m in models.ALL
                   if m.input_sha == contract.get("official_sha256")), None)
     if found is None or (model_id is not None and found.id != model_id):
         raise FilmFitError("拟合目标与官方原件身份不匹配")
@@ -68,7 +71,7 @@ def stored_curves(profile):
     knots per curve and expands them to 256 points when used (lossy)."""
     if FILM_LAYOUT != "four_curve_v1":
         return [list(c) for c in profile["curves_u14"]], 0
-    if profile.get("model") == models.GR3X.name:
+    if profile.get("model") == models.GR3X.name:  # GR IIIx 1.60 and 1.70
         from .gr3x_inplace_support import expand_knots, fit_knots
     else:
         from .film_four_validation import expand_knots, fit_knots
@@ -155,8 +158,8 @@ def fit_cube(data, ident, contract, envelope=None, *, model_id=None):
     except film_luts.FilmLutError as exc:
         raise FilmFitError(str(exc)) from None
     model = models.get(model_id)
-    if model == models.GR3X:contract_model(contract, model.id)
-    fitter = IIIX_FITTER_ID if model == models.GR3X else FITTER_ID
+    if models.is_iiix(model):contract_model(contract, model.id)
+    fitter = IIIX_FITTER_ID if models.is_iiix(model) else FITTER_ID
     base = contract["values"]
     if len(base) != 256 or contract.get("output_normalization_divisor") != 16384:
         raise FilmFitError("相机基础曲线格式不符")
@@ -184,7 +187,7 @@ def fit_cube(data, ident, contract, envelope=None, *, model_id=None):
             algorithm="port of gr3-film-mods cube_fit/cca1_fit (MIT, idontknownihil), modified by LiorMoment"),
         native_effect_verified=False)
     try:
-        if model == models.GR3X:
+        if models.is_iiix(model):
             profile.update(official_sha256=model.input_sha, base_model_id=contract["model_id"])
         profile = validate_profile(profile, ident, model.id)
     except FilmRequestError as exc:

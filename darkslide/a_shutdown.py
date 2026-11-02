@@ -16,6 +16,7 @@ OLD_PATH = b'B:\\Resource\\Jpeg\\GB_Diary.jpg'
 NEW_PATH = b'A:\\Resource\\Jpeg\\GB_Diary.jpg'
 PATH_VA = 0x53B2298C
 RESOURCE_HEADER = 59298653
+RESOURCE_HEADER_220 = 59378796   # GR III 2.20 / GR IIIx 1.70 (two more RES records before it)
 
 class AShutdownError(ValueError):
     pass
@@ -29,21 +30,24 @@ def sha(data):
 
 def _apply_a_shutdown(decoded, jpeg, model_id=None):
     """Pinned official payload only; checksum intentionally left to builder."""
+    from . import models
     need(type(jpeg) is bytes, 'JPEG bytes required; None is not restoration')
     changed, details = shared.apply_shared(decoded, jpeg, model_id)
-    path_at = shared.off(PATH_VA, len(OLD_PATH) + 1)
+    L = shared.layout(models.get(model_id))
+    header = RESOURCE_HEADER_220 if L is shared.L220 else RESOURCE_HEADER
+    path_at = shared.off(L['path_va'], len(OLD_PATH) + 1, L['rtos_end'])
     need(decoded[path_at:path_at + len(OLD_PATH) + 1] == OLD_PATH + b'\0',
          'original RTOS Diary path')
-    need(decoded[RESOURCE_HEADER:RESOURCE_HEADER + 32] == OLD_PATH.ljust(32, b'\0') and
-         struct.unpack_from('<I', decoded, RESOURCE_HEADER + 32)[0] == shared.CAPACITY and
-         RESOURCE_HEADER + 36 == shared.PIXEL_OFFSET, 'original RES path/length')
+    need(decoded[header:header + 32] == OLD_PATH.ljust(32, b'\0') and
+         struct.unpack_from('<I', decoded, header + 32)[0] == shared.CAPACITY and
+         header + 36 == L['pixel_offset'], 'original RES path/length')
     need(decoded.find(NEW_PATH) == -1, 'A-drive path collision')
     updated = bytearray(changed)
     updated[path_at] = ord('A')
-    updated[RESOURCE_HEADER] = ord('A')
+    updated[header] = ord('A')
     edits = list(details['edits']) + [
         dict(what='rtos_diary_path_drive', offset=path_at, length=1, before='42', after='41'),
-        dict(what='res_diary_path_drive', offset=RESOURCE_HEADER, length=1, before='42', after='41')]
+        dict(what='res_diary_path_drive', offset=header, length=1, before='42', after='41')]
     need(len(updated) == len(decoded), 'payload expansion')
     details = dict(details, schema='gr3-a-shutdown-offline-v1', edits=edits,
                    shared_path=NEW_PATH.decode('ascii'), output_payload_sha256=sha(updated),

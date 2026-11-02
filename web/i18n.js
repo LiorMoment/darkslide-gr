@@ -80,7 +80,7 @@
     });
   }
 
-  function core(text, t, depth) {
+  function whole(text, t, depth) {
     if (t.exact.has(text)) return t.exact.get(text);
     if (depth < 3) {
       for (const p of t.patterns) {
@@ -88,6 +88,16 @@
         if (m) return fill(p.value, p.slots, m.slice(1).map((a) => translate(a, depth + 1)));
       }
     }
+    return null;
+  }
+
+  function core(text, t, depth) {
+    const hit = whole(text, t, depth);
+    if (hit !== null) return hit;
+    // The page puts a status mark before server messages ("✕ " + reason); match the message without it.
+    const mark = /^([✓✕⚠] )(.+)$/.exec(text);
+    const rest = mark ? whole(mark[2], t, depth) : null;
+    if (rest !== null) return mark[1] + rest;
     let out = t.fragRe ? text.replace(t.fragRe, (f) => t.exact.get(f)) : text;
     if (lang === "en") out = out.replace(/([㐀-鿿])([A-Za-z])/g, "$1 $2").replace(/([A-Za-z.,])([㐀-鿿])/g, "$1 $2");
     return out;

@@ -24,13 +24,14 @@ it continues into ("tail"): checks of the same adjustment call the same pair.
 import struct
 
 from .film_requests import FilmRequestError
+from .fwaddr import A as fa
 
-TONES = {8: 18, 9: 19, 10: 20, 11: 21}   # film slot -> Image Control tone
+TONES = {2: 12, 8: 18, 9: 19, 10: 20, 11: 21}   # film slot -> Image Control tone
 STANDARD = 11
 NEVER = 0xFF
 RANGE = (0x5325B000, 0x5326B800)        # still-image checks of tones 11..22
 # Adjustments shared with Standard, per installed tone and set (checked on 2.10).
-EXPECTED = {18: 9, 19: 9, 20: 2, 21: 9}
+EXPECTED = {12: 9, 18: 9, 19: 9, 20: 2, 21: 9}
 
 
 def _rotate_imm(imm12):
@@ -82,7 +83,7 @@ def _signature(read, tail):
 
 def scan(read):
     """Every stock still-image check in RANGE: dicts with at, set, tone, word, tail, signature."""
-    start, end = RANGE
+    start, end = fa(RANGE)
     words = struct.unpack('<%dI' % ((end - start) // 4), read(start, end - start))
     found = []
     for i in range(len(words) - 13):

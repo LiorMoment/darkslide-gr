@@ -43,8 +43,8 @@
         <span class="drop-icon" aria-hidden="true">↑</span>
         <span class="drop-text">
           <span id="dropTitle">拖入官方固件，或点这里选择</span>
-          <span class="dim small fw-get" id="fwGet">没有官方固件？<a id="fwDownload" href="https://www.ricoh-imaging.co.jp/resources/japan/support/download/digital/FIRMWARE/gr3_v210.zip" rel="noopener noreferrer">下载 GR III 2.10</a><span class="dim2">（理光官网，约 27 MB）</span></span>
-          <span class="dim2 xsmall"><span id="fwHint">gr3_v210.zip 不用解压，fwdc239b.bin 也可以</span> · 文件只留在你的电脑上 · 下载即表示同意理光<a id="fwLicence" href="https://www.ricoh-imaging.co.jp/english/support/digital/gr3_s.html" target="_blank" rel="noopener">软件许可协议</a></span>
+          <span class="dim small fw-get" id="fwGet">没有官方固件？<span id="fwLinks"><a class="fw-dl" href="https://www.ricoh-imaging.co.jp/resources/japan/support/download/digital/FIRMWARE/gr3_v220.zip" rel="noopener noreferrer">下载 GR III 2.20</a> · <a class="fw-dl" href="https://www.ricoh-imaging.co.jp/resources/japan/support/download/digital/FIRMWARE/gr3_v210.zip" rel="noopener noreferrer">2.10</a></span><span class="dim2">（理光官网，约 27 MB）</span><span class="dim2" id="fwWhich">相机现在是哪个版本就下哪个（菜单 › 设置 › 固件版本）</span></span>
+          <span class="dim2 xsmall"><span id="fwHint">gr3_v220.zip / gr3_v210.zip 不用解压，fwdc239b.bin 也可以</span> · 文件只留在你的电脑上 · 下载即表示同意理光<a id="fwLicence" href="https://www.ricoh-imaging.co.jp/english/support/digital/gr3_s.html" target="_blank" rel="noopener">软件许可协议</a></span>
         </span>
       </label>
       <div class="import-side">
@@ -61,9 +61,9 @@
     <nav class="rail" aria-label="功能">
       <button class="rail-item" id="featIC" data-feature="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v12H4zM8 7l1.5-2h5L16 7M12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg><span>影像控制</span></button>
       <button class="rail-item" id="featShutdown" data-feature="shutdown"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8M7 6a7 7 0 1 0 10 0"/></svg><span>关机画面</span></button>
-      <button class="rail-item" id="featRatio" data-feature="ratio" title="画幅：新增 65:24（研发中）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14h14M3 7h14v14"/></svg><span>画幅</span><span class="rail-tag mono" data-dev="wide_ratio">研发中</span></button>
+      <button class="rail-item" id="featRatio" data-feature="ratio" title="画幅：新增 16:9 和 65:24"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14h14M3 7h14v14"/></svg><span>画幅</span><span class="rail-tag mono" data-dev="wide_ratio">研发中</span></button>
       <button class="rail-item" id="featSoft" data-feature="soft" title="柔光：关 · 弱 · 中 · 强"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></svg><span>柔光</span><span class="rail-tag mono" data-dev="soft_glow">研发中</span></button>
-      <button class="rail-item" id="featDate" data-feature="date" disabled title="计划中，暂时不能打开"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg><span>日期印记</span><span class="rail-tag mono">计划中</span></button>
+      <button class="rail-item" id="featDate" data-feature="date" title="日期印记：照片右下角印日期"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg><span>日期印记</span><span class="rail-tag mono" data-dev="date_stamp">研发中</span></button>
       <div class="grow"></div>
       <a class="rail-item rail-rescue" href="#" id="rescueLink"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg><span>救机说明</span></a>
     </nav>
@@ -149,6 +149,7 @@
           </div>
         </section>
 
+        <p class="small dim" id="filmNotAdapted" hidden></p>
         <section class="v1-films" aria-label="胶片 LUT" id="filmField">
           <div class="v1-films-line"><span class="v1-films-title">胶片</span><button type="button" class="v1-info" id="filmCreditInfo" aria-label="数据来源与许可" hidden>ⓘ</button><div class="v1-film-row" id="filmChips" role="group" aria-label="胶片 LUT"></div><span class="v1-fit-badge" id="fitBadge">近似程度 —</span></div>
           <div class="v1-films-head"><span class="v1-note" id="filmHint">点一种当起点，再用右边滑块微调 · 「＋ 添加」导入 LUT 或 Lightroom 预设 · 近似效果，与厂商无关</span><span class="v1-pill" id="filmBadge">写入等实机测试</span></div>
@@ -161,7 +162,7 @@
           </div>
         </section>
 
-        <section class="v1-out" aria-label="输出">
+        <section class="v1-out" aria-label="输出" id="filmOut">
           <div class="v1-fit">
             <div class="v1-fit-head"><span>颜色装进相机的近似程度</span><button type="button" class="v1-fit-btn" id="btnFit" hidden title="把选的胶片 LUT 和右边的调整换算成相机参数（几秒钟）；换算后才能写进相机">拟合</button><button type="button" class="v1-fit-btn" id="btnPull" hidden title="找一个改动最小、能写进相机的版本，和原来的并排给你看；选不选由你，原来的保留不动">收进相机范围</button></div>
             <div class="v1-fit-track"><span id="fitBar"></span></div>
@@ -214,13 +215,14 @@
         <section class="pcard" aria-label="概要">
           <div class="pcard-main">
             <div class="pcard-title"><span>画幅</span></div>
-            <div class="chips"><span class="chip-s">新增 65:24</span><span class="chip-s">3:2 · 1:1 · 16:9 保留</span><span class="chip-s">所有预设共用</span></div>
+            <div class="chips"><span class="chip-s">新增 16:9 · 65:24</span><span class="chip-s">3:2 · 1:1 保留</span><span class="chip-s">所有预设共用</span></div>
           </div>
           <span class="badge outline mono" data-dev="wide_ratio">研发中</span>
         </section>
         <section class="cards one" aria-label="设置">
           <div class="card">
-            <div class="switch-row"><button class="switch" role="switch" aria-checked="false" id="ratioSwitch" aria-label="把 65:24 宽幅装进相机（研发中）" disabled><span></span></button><span>把 65:24 宽幅装进相机</span></div>
+            <div class="switch-row"><button class="switch" role="switch" aria-checked="false" id="ratioSwitch" aria-label="把 16:9 和 65:24 宽幅装进相机" disabled><span></span></button><span>把 16:9 和 65:24 宽幅装进相机</span></div>
+            <div class="hint soft" id="ratioBodyNote" hidden></div>
           </div>
           <div class="card">
             <div class="card-head"><span>在相机里怎么用</span><span class="dim2 xsmall">示意图</span></div>
@@ -392,6 +394,32 @@
         </section>
       </div>
 
+      <div id="paneDate" class="pane" hidden>
+        <section class="pcard" aria-label="概要">
+          <div class="pcard-main">
+            <div class="pcard-title"><span>日期印记</span></div>
+            <div class="chips"><span class="chip-s">胶片橙色</span><span class="chip-s">跟随方向和画幅</span><span class="chip-s">只印 JPEG</span></div>
+          </div>
+          <span class="badge outline mono" data-dev="date_stamp">研发中</span>
+        </section>
+        <section class="cards one" aria-label="设置">
+          <div class="card">
+            <div class="switch-row"><button class="switch" role="switch" aria-checked="false" id="dateSwitch" aria-label="把日期印记装进相机" disabled><span></span></button><span>把日期印记装进相机</span></div>
+            <div class="hint soft">日期印记要和柔光、画幅一起装：打开它会同时打开这两项，关掉其中一项，日期印记也会关。</div>
+            <div class="hint soft" id="dateBodyNote" hidden></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>在相机里怎么用</span></div>
+            <ul class="soft-steps howto-notes">
+              <li>设置页最后一页多一行「日期」，默认关，打开后才印。</li>
+              <li>目标是在照片看起来的右下角印上该照片的时间，覆盖主图、预览和缩略图；实际效果待验证。</li>
+              <li>RAW+JPEG：设计为只在 JPEG 图像上印字，不写 RAW 数据；共用的 DNG 内嵌预览预计也带字，实际效果待验证。</li>
+              <li>机内 RAW 显影预计不印，尚未实机验证。单独的诊断版在部分拒绝条件下可能印出诊断码，照片保存和故障行为仍待验证。</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
       <div id="paneSoon" class="pane" hidden>
         <section class="pcard"><div class="pcard-main"><div class="pcard-title"><span id="soonTitle"></span><span class="mono dim xsmall" id="soonSub"></span></div></div><span class="badge outline mono" id="soonBadge"></span></section>
         <div class="soon-body"><p class="dim" id="soonText"></p></div>
@@ -416,7 +444,7 @@
         <div class="kv"><span class="dim">模板</span><span id="templateState"></span></div>
       </div>
       <div class="out-block bordered" hidden>
-        <button class="btn" id="btnFilmPrepare">核对已保存的四卷选择</button>
+        <button class="btn" id="btnFilmPrepare">核对已保存的胶片选择</button>
         <div id="filmPrepareStatus" class="small" role="status">保存后可做不扩容只读核对。未装位置保留原厂。</div>
         <div id="filmPrepareSlots" class="small"></div>
       </div>
@@ -451,7 +479,7 @@
             <option value="zh-CN" lang="zh-Hans" translate="no">简体中文</option>
             <option value="th" lang="th" translate="no">ภาษาไทย</option>
         </select>
-        <div class="small menu-lang-auto" id="menuLangAuto" hidden>已按电脑语言预选，请确认和相机的菜单语言一致。</div>
+        <div class="small menu-lang-auto" id="menuLangAuto" hidden>已按界面语言预选，请确认和相机的菜单语言一致。</div>
         <div class="dim2 xsmall" id="menuLangNote" title="固件里的 21 种语言都可选。改过的预设名会显示在这个语言的菜单里（英文菜单也会显示），其他语言保持原厂；名字比原厂英文名长时，另有一种不常用的语言也会显示。">固件里的 21 种语言都可选。改过的预设名会显示在这个语言的菜单里（英文菜单也会显示），其他语言保持原厂；名字比原厂英文名长时，另有一种不常用的语言也会显示。</div>
       </div>
       <div class="row nowrap">
@@ -548,7 +576,7 @@
   <div class="rescue">
     <div class="dim small">救机</div>
     <h1>救机说明</h1>
-    <p class="dim">刷修改版之前请读完。出问题时，可以尝试用<strong>官方 <span class="rescue-model">GR III</span> <span class="rescue-ver">2.10</span> 原件</strong>刷回去。本工具生成的文件不会把版本号调高：版本字段保持 <span class="rescue-ver">2.10</span>。<span id="rescueTested">同一版本可以重复更新：已在一台 GR III 上实测，改过的 2.10 可以刷入 2.10 机身，也可以再刷回官方 2.10 原件。</span>每一份文件还过了“救机门禁”：引导链记录、RTOS/ICONBIN/RES 以外的记录，以及更新器与开机流程所在的两个代码区域，都和原件逐字节相同，否则不会提供下载。门禁只是这几条已列规则的离线检查，不覆盖其余改动的影响，也不保证刷回一定成功。</p>
+    <p class="dim">刷修改版之前请读完。出问题时，可以尝试用<strong>官方 <span class="rescue-model">GR III</span> <span class="rescue-ver">2.10</span> 原件</strong>刷回去。本工具生成的文件不会把版本号调高：版本字段保持 <span class="rescue-ver">2.10</span>。<span id="rescueTested">一个第五槽、画幅和柔光测试包曾在一台普通 GR III 2.10 上刷回官方一次；本次配置仍需验证。</span>每一份文件还过了“救机门禁”：引导链记录、RTOS/ICONBIN/RES 以外的记录，以及更新器与开机流程所在的两个代码区域，都和原件逐字节相同，否则不会提供下载。门禁只是这几条已列规则的离线检查，不覆盖其余改动的影响，也不保证刷回一定成功。</p>
 
     <h2>出问题时怎么判断</h2>
     <dl class="table">
@@ -729,12 +757,15 @@
 
 
 <dialog id="untestedDialog" class="dialog">
-  <div class="dialog-head"><span>这次生成的内容还没在这款 GR IIIx 上实测过</span></div>
+  <div class="dialog-head"><span id="untestedHead">这次生成的内容还没在这款 GR IIIx 上实测过</span></div>
   <ol class="preflight">
     <li id="untestedVariant">GR IIIx 城市版和 HDF<b id="untestedBody"></b>目前只做了离线核对：安装、开机、菜单、拍出来的颜色，以及刷回官方 1.60 救机，都还没在真机上验证过（标准版已有用户实机刷入使用）。</li>
+    <li id="untestedVivid" hidden>这次给鲜艳装了胶片。一个第五槽、画幅和柔光测试包在一台普通 GR III 2.10 上试用并刷回官方一次；本次配置和其他机身仍需验证。胶片和第五槽也改动了按住 MENU 开机时可能运行的代码。</li>
+    <li id="untestedWide" hidden>这次打开了画幅。一个画幅、柔光和第五槽测试包在一台普通 GR III 2.10 上做过主要用法测试；本次配置仍需验证。画幅改动了按住 MENU 开机路径上的几处代码。</li>
+    <li id="untestedGlow" hidden>这次打开了柔光。一个柔光、画幅和第五槽测试包在一台普通 GR III 2.10 上做过主要用法测试；单独柔光和其他配置仍需验证。柔光也改动了按住 MENU 开机时可能运行的代码。</li>
     <li id="untestedFeatures" hidden>这次用到的<b id="untestedFeatureNames"></b>在 GR IIIx 上已适配、未实测：离线核对都通过了，但还没有人在 GR IIIx 上刷过。在普通 GR III 上已实测。</li>
     <li id="untestedExtension" hidden>你勾选了「保存配方、RAW 恢复」模块：它会在固件里追加一段程序，固件的程序区会变大，这一部分同样没有实测。</li>
-    <li>刷之前请准备一张只放官方 1.60 原件 fwdc243b.bin 的救机卡。如果刷坏到按住 MENU 开机也进不了更新画面，目前没有已验证的恢复办法。</li>
+    <li id="untestedRescue">刷之前请准备一张只放官方 1.60 原件 fwdc243b.bin 的救机卡。如果刷坏到按住 MENU 开机也进不了更新画面，目前没有已验证的恢复办法。</li>
   </ol>
   <label class="cam-confirm"><input type="checkbox" id="untestedBox"><span>我知道这是<b>未实测</b>的版本，刷机风险自己承担。</span></label>
   <div class="row end">

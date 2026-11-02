@@ -1,8 +1,11 @@
 """Read-only capability reporting; never change firmware or CollaboMode."""
 from .hdf_guard import BODIES,need
 MODES={0:2,1:3,2:11,3:10,4:12}
+# GR III 2.20 / GR IIIx 1.70: CollaboMode 5 / 6 select requests 13 / 14 (20th / 30th anniversary).
+MODES_220={**MODES,5:13,6:14}
 
-def shutdown_coverage(body,request_ids,observed_mode=None):
+def shutdown_coverage(body,request_ids,observed_mode=None,modes=MODES):
+    MODES=modes
     need(type(body) is str and body in BODIES,'explicit supported body required')
     need(type(request_ids) is tuple and all(type(x) is int and x in MODES.values() for x in request_ids),'request ids')
     need(len(request_ids)==len(set(request_ids)),'duplicate request')

@@ -1,11 +1,11 @@
 "use strict";
-// Film picker inside 影像控制: the four replaceable presets choose a built-in film or
+// Film picker inside 影像控制: replaceable presets choose a built-in film or
 // one of the project's own LUTs. Previews use approximate LUTs on the user's own sample
 // photo, decoded in this tab; nothing is uploaded. Writing into the camera is decided by
 // the local writer's status (off until it has been tested on a camera).
 (function () {
   const $ = (id) => document.getElementById(id);
-  const SLOTS = [8, 9, 10, 11];
+  const SLOTS = [2, 8, 9, 10, 11];
   const PREVIEW_SIDE = 1600;
   const film = { catalog: null, writer: null, luts: [], recipes: [], pid: null, cubes: {}, graded: {}, source: null, busy: {}, camFail: {}, fitting: false, outside: null,
                  gradeLimits: null, live: null, ranges: {}, curveEnds: null, pull: null, estimates: {}, lastGrade: {}, asked: {}, retried: {}, checking: null, checked: {} };
@@ -74,6 +74,8 @@
         if (!valid()) return;
         if (!film.catalog || film.catalog.data_revision !== cat.data_revision) film.cubes = {};
         film.catalog = cat; film.writer = cat.writer;
+        probeIcons(cat);
+        if (hooks.filmsReady) hooks.filmsReady(pid);
       }
       const result = await api("GET", "/api/projects/" + pid + "/film-luts");
       if (!valid()) return;
@@ -86,6 +88,8 @@
     } catch (e) { if (valid()) toast("胶片列表读取失败：" + e.message, true); }
     if (!valid()) return;
     hooks.rerender();
+    // A firmware without film support: range checks and fitting would only fail.
+    if (film.capabilities && film.capabilities.films === false) return;
     try {
       const result = await api("GET", "/api/projects/" + pid + "/film-check");
       if (!valid()) return;
@@ -531,7 +535,7 @@
     }
     $("filmChips").replaceChildren(...tiles);
     let hint;
-    if (!allowed) hint = "这个预设换胶片目前正在开发中，等稳定之后开放；现在能换胶片的是银流冲洗、怀旧、HDR 色调、交叉冲洗。";
+    if (!allowed) hint = "这个预设暂不支持换胶片；现在能换胶片的是鲜艳、银流冲洗、怀旧、HDR 色调、交叉冲洗。";
     else if (!film.catalog) hint = "胶片列表读取中…";
     else hint = "";  // user, 2026-10-17: no general instructions here; only the locked-preset note remains
     $("filmField").title = candidateReady() ? "会进入 IIIx 离线候选；机身待测" : ready ? "" : "胶片写入已接通，等实机测试后开启：现在选择会保存，暂不参与生成";
@@ -631,7 +635,7 @@
   }
 
   // Own LUTs get a small × (top left; the 待拟合/超范围 tag sits top right). Built-in films have none.
-  const SLOT_NAMES = { 8: "银流冲洗", 9: "怀旧", 10: "HDR 色调", 11: "交叉冲洗" };
+  const SLOT_NAMES = { 2: "鲜艳", 8: "银流冲洗", 9: "怀旧", 10: "HDR 色调", 11: "交叉冲洗" };
   function removable(l, b) {
     const wrap = document.createElement("div");
     wrap.className = "film-tile-wrap";
@@ -811,6 +815,25 @@
     card.width = crop.sw; card.height = crop.sh;
     card.getContext("2d").drawImage(source, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
     return { small: plateCanvas(lines, 40), source, crop, card: card.toDataURL("image/png") };
+  }
+
+  // A user's icon file the browser cannot draw (right header, broken content, or a request that failed
+  // just now) counts as none for this page load: the film shows its card and gets its name plate, instead
+  // of an empty tile and an icon that cannot be read. One that does load lets a preset given the plate as
+  // a stand-in earlier take the user's icon again (hooks.iconReady).
+  function probeIcons(cat) {
+    cat.missed = new Set();
+    for (const id of Object.keys(cat.icons || {})) {
+      const img = new Image();
+      img.onload = () => { if (film.catalog === cat && hooks.iconReady) hooks.iconReady(id, film.pid); };
+      img.onerror = () => { if (film.catalog === cat && cat.icons[id]) { delete cat.icons[id]; cat.missed.add(id); hooks.rerender(); } };
+      img.src = iconUrl(id);
+    }
+  }
+
+  // The user has an icon file for this film that could not be read on this page load.
+  function iconMissed(id) {
+    return !!(film.catalog && film.catalog.missed && film.catalog.missed.has(id));
   }
 
   // The user's own icon for a built-in film (<data>/film_icons/<id>.png …), or null.
@@ -1188,5 +1211,5 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menu.hidden) menu.hidden = true; });
   }
 
-  window.DarkslideFilm = { gradeLimitsFor, pullNow, fitPending, presetName, wire, load, render, renderOutput, exportCube, fitNow, fitState, filmInfo, plateOf, plateIcon, iconUrl, gradedCanvas, gradedUrl, previewUrl, previewError, nameOf, candidateReady, writerReady: () => !!(film.capabilities && film.capabilities.film_output), SLOTS };
+  window.DarkslideFilm = { gradeLimitsFor, pullNow, fitPending, presetName, wire, load, render, renderOutput, exportCube, fitNow, fitState, filmInfo, plateOf, plateIcon, iconUrl, iconMissed, gradedCanvas, gradedUrl, previewUrl, previewError, nameOf, candidateReady, writerReady: () => !!(film.capabilities && film.capabilities.film_output), SLOTS };
 })();

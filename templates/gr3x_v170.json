@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "id": "gr3x-1.70-reviewed-1",
+  "model": "GR IIIx",
+  "firmware": "1.70",
+  "reviewed": true,
+  "review_note": "GR IIIx 1.70（2026-10-21 发布）：与 GR III 2.20 同一套地址，图标和名称布局已离线核对；尚未实机验证。",
+  "official_inputs": [
+    {
+      "filename": "fwdc243b.bin",
+      "size": 30472528,
+      "sha256": "aa8e3ae1349d94e83be381c20530e41d5e57b75c27ef24ba81c7b017d6c11592"
+    }
+  ],
+  "icon": {
+    "width": 40,
+    "height": 40,
+    "visible": {
+      "x": 1,
+      "y": 2,
+      "width": 38,
+      "height": 36
+    }
+  },
+  "slots": [
+    {
+      "no": 1,
+      "name": "标准",
+      "abbr": "Std",
+      "mode": 11,
+      "icon_id": 358,
+      "string_id": 4,
+      "factory_en": "Standard",
+      "icon": "test",
+      "rename": "closed",
+      "note": "这个名称在相机其他菜单里也会用到，暂不开放改名"
+    },
+    {
+      "no": 2,
+      "name": "鲜艳",
+      "abbr": "Vi",
+      "mode": 12,
+      "icon_id": 548,
+      "string_id": 268,
+      "factory_en": "Vivid",
+      "icon": "test",
+      "rename": "test",
+      "name_max": 12
+    },
+    {
+      "no": 3,
+      "name": "单色",
+      "abbr": "BW",
+      "mode": 13,
+      "icon_id": 354,
+      "string_id": 269,
+      "factory_en": "Monotone",
+      "icon": "test",
+      "rename": "test",
+      "name_max": 12
+    },
+    {
+      "no": 4,
+      "name": "柔和单色",
+      "abbr": "Soft",
+      "mode": 14,
+      "icon_id": 357,
+      "string_id": 270,
+      "factory_en": "Soft Monotone",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 5,
+      "name": "硬调单色",
+      "abbr": "Hard",
+      "mode": 15,
+      "icon_id": 350,
+      "string_id": 271,
+      "factory_en": "Hard Monotone",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 6,
+      "name": "高对比黑白",
+      "abbr": "Hi",
+      "mode": 16,
+      "icon_id": 352,
+      "string_id": 272,
+      "factory_en": "Hi-Contrast B&W",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 7,
+      "name": "正片",
+      "abbr": "Posi",
+      "mode": 17,
+      "icon_id": 232,
+      "string_id": 274,
+      "factory_en": "Positive Film",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 8,
+      "name": "银流冲洗",
+      "abbr": "BB",
+      "mode": 18,
+      "icon_id": 346,
+      "string_id": 275,
+      "factory_en": "Bleach Bypass",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 9,
+      "name": "怀旧",
+      "abbr": "Retro",
+      "mode": 19,
+      "icon_id": 356,
+      "string_id": 276,
+      "factory_en": "Retro",
+      "icon": "test",
+      "rename": "test",
+      "name_max": 8
+    },
+    {
+      "no": 10,
+      "name": "HDR 色调",
+      "abbr": "HDR",
+      "mode": 20,
+      "icon_id": 351,
+      "string_id": 277,
+      "factory_en": "HDR Tone",
+      "icon": "test",
+      "rename": "test",
+      "name_max": 12
+    },
+    {
+      "no": 11,
+      "name": "交叉冲洗",
+      "abbr": "X",
+      "mode": 21,
+      "icon_id": 50,
+      "string_id": 278,
+      "factory_en": "Cross Processing",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 12,
+      "name": "负片",
+      "abbr": "Nega",
+      "mode": 22,
+      "icon_id": 23,
+      "string_id": 273,
+      "factory_en": "Negative Film",
+      "icon": "test",
+      "rename": "test"
+    },
+    {
+      "no": 13,
+      "name": "自定义 1",
+      "abbr": "1",
+      "mode": 23,
+      "icon_id": 347,
+      "string_id": 279,
+      "factory_en": "Custom1",
+      "icon": "closed",
+      "rename": "closed"
+    },
+    {
+      "no": 14,
+      "name": "自定义 2",
+      "abbr": "2",
+      "mode": 24,
+      "icon_id": 348,
+      "string_id": 280,
+      "factory_en": "Custom2",
+      "icon": "closed",
+      "rename": "closed"
+    }
+  ]
+}

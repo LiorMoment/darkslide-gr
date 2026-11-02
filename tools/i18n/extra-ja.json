@@ -17,5 +17,7 @@
 "%d 项": "%d 項目",
 "项": "項目",
 "正面示意图": "正面図",
-"预览 LUT 与胶片数据来自 spektrafilm（Andrea Volpato，CC BY-SA 4.0），由 LiorMoment 修改（设定白点）；相机参数由 DARKSLIDE GR 拟合。": "プレビュー LUT とフィルムデータは spektrafilm（Andrea Volpato、CC BY-SA 4.0）に基づき、LiorMoment が修正（白色点を設定）しました。カメラのパラメーターは DARKSLIDE GR がフィッティングしています。"
+"预览 LUT 与胶片数据来自 spektrafilm（Andrea Volpato，CC BY-SA 4.0），由 LiorMoment 修改（设定白点）；相机参数由 DARKSLIDE GR 拟合。": "プレビュー LUT とフィルムデータは spektrafilm（Andrea Volpato、CC BY-SA 4.0）に基づき、LiorMoment が修正（白色点を設定）しました。カメラのパラメーターは DARKSLIDE GR がフィッティングしています。",
+"下载 GR IIIx 1.70": "GR IIIx 1.70 をダウンロード",
+"gr3x_v170.zip / gr3x_v160.zip 不用解压，fwdc243b.bin 也可以": "gr3x_v170.zip / gr3x_v160.zip は解凍不要、fwdc243b.bin でも可"
 }

@@ -1,4 +1,4 @@
-"""Image Control menu order (GR III 2.10, GR IIIx 1.60): the request shape and the table writer.
+"""Image Control menu order (GR III 2.10 / 2.20, GR IIIx 1.60 / 1.70): the request shape and the table writer.
 
 The order is a list of fixed editor slot numbers (template `no`), never menu rows.
 The camera keeps three photo lists (sets No0/No1/No2), three movie lists and the
@@ -30,6 +30,11 @@ UNSUPPORTED = "这个型号暂不支持排序"
 STILL_VA = (0x53B59224, 0x53B58FCC, 0x53B5919C)
 VIDEO_VA = (0x53B59234, 0x53B591C8, 0x53B5936C)
 RAW_VA = 0x53B5A988
+# GR III 2.20 / GR IIIx 1.70: the same seven tables with the same bytes, moved by the rebuilt main
+# system (checked 2026-10-25 against the 2.10 tables).
+STILL_VA_220 = (0x53B58B4C, 0x53B588F4, 0x53B58AC4)
+VIDEO_VA_220 = (0x53B58B5C, 0x53B58AF0, 0x53B58C94)
+RAW_VA_220 = 0x53B5A2B0
 
 
 class MenuOrderError(ValueError):
@@ -46,7 +51,7 @@ def _offset(va):
 
 
 # Reviewed template -> official payload identity the writer accepts.
-_TEMPLATES = {(models.GR3.id, "GR III", "2.10"): models.GR3, (models.GR3X.id, "GR IIIx", "1.60"): models.GR3X}
+_TEMPLATES = {(m.id, m.name, m.firmware): m for m in (models.GR3, models.GR3X, models.GR3_220, models.GR3X_170)}
 
 
 def _model_of(template):
@@ -61,7 +66,7 @@ def supported(template):
 
 
 def model_supported(model):
-    return getattr(model, "id", None) in (models.GR3.id, models.GR3X.id)
+    return getattr(model, "id", None) in {m.id for m in _TEMPLATES.values()}
 
 
 def editable(template):
@@ -143,14 +148,15 @@ def write_tables(before, order, template):
     tone = _tones(template)
     still_old = bytes(tone[s] for s in FACTORY_STILL)
     video_old = bytes(tone[s] for s in FACTORY_VIDEO)
-    raw_at = _offset(RAW_VA)
+    still_va, video_va, raw_va = _addresses(_model_of(template))
+    raw_at = _offset(raw_va)
     raw_old = before[raw_at:raw_at + len(FACTORY_STILL)]
     _need(sorted(raw_old) == list(range(1, 13)), "RAW 显影选项表和原厂不同")
     # RAW option of each tone, read from the factory tables (row r of the photo list <-> RAW entry r).
     raw_of = {still_old[r]: raw_old[r] for r in range(len(FACTORY_STILL))}
-    plan = [(va, still_old, bytes(tone[s] for s in order["still_slots"])) for va in STILL_VA]
-    plan += [(va, video_old, bytes(tone[s] for s in order["video_slots"])) for va in VIDEO_VA]
-    plan.append((RAW_VA, raw_old, bytes(raw_of[tone[s]] for s in order["still_slots"])))
+    plan = [(va, still_old, bytes(tone[s] for s in order["still_slots"])) for va in still_va]
+    plan += [(va, video_old, bytes(tone[s] for s in order["video_slots"])) for va in video_va]
+    plan.append((raw_va, raw_old, bytes(raw_of[tone[s]] for s in order["still_slots"])))
     changed, spans = bytearray(before), []
     for va, old, new in plan:
         at = _offset(va)
@@ -162,11 +168,17 @@ def write_tables(before, order, template):
     return bytes(changed), spans
 
 
+def _addresses(model):
+    if models.is_220(model):
+        return STILL_VA_220, VIDEO_VA_220, RAW_VA_220
+    return STILL_VA, VIDEO_VA, RAW_VA
+
+
 def apply(before, order, template):
     """Pinned entry for the compositor: only the official payload of the template's model."""
     model = _model_of(template)
     _need(model is not None, UNSUPPORTED)
-    _need(type(before) is bytes and len(before) == builder.PAYLOAD_SIZE and
+    _need(type(before) is bytes and len(before) == (model.payload_size if models.is_220(model) else builder.PAYLOAD_SIZE) and
           builder._sha(before) == (builder.PAYLOAD_SHA if model == models.GR3 else model.payload_sha),
           "需要官方 %s %s 原件" % (model.name, model.firmware))
     return write_tables(before, order, template)

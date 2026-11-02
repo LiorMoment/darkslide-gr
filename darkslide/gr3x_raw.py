@@ -18,7 +18,9 @@ WINDOWS=((0x53599df0,0x53599e68),(0x535c780c,0x535c796c),
  (0x53d2d920,0x53d2d92b),(0x53efd184,0x53efd1c6),
  (0x53efd1c8,0x53efd1e9),(0x55037634,0x550376b8),
  (0x536068a4,0x536068a8),(0x53606fd4,0x53606fd8))
-SLOTS={8:(18,0x107,9),9:(19,0x108,10),10:(20,0x109,11),11:(21,0x10a,12)}
+# Vivid uses the stock mode/tag/RAW selector. The separate calibration-table
+# index 22 is not a menu index or RAW selector, and remains untouched.
+SLOTS={2:(12,0x101,2),8:(18,0x107,9),9:(19,0x108,10),10:(20,0x109,11),11:(21,0x10a,12)}
 NOTE=('RAW 已核对原厂槽位读回与分段参数路径；完整机内显影待实机。'
       '照片不保存自定义胶片配方；更换同一槽位的胶片后，旧 RAW 不能据此恢复旧配方。')
 

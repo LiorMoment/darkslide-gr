@@ -26,11 +26,11 @@ class InplaceRouting(unittest.TestCase):
     def test_future_enabled_dispatch_preserves_saved_project(self):
         for grade in (False,True):
             req,p,t=self.fixture(grade)
-            with patch.object(server,'project_context',return_value=(copy.deepcopy(p),models.GR3,t)),patch.object(generate,'run_inplace',return_value=(b'toy-result',{'toy':True})) as producer,patch.object(generate,'run',side_effect=AssertionError('legacy producer')):
+            with patch.object(server,'project_context',return_value=(copy.deepcopy(p),models.GR3,t)),patch.object(generate,'run_inplace',return_value=(b'toy-result',{'toy':True,'features':['film']})) as producer,patch.object(generate,'run',side_effect=AssertionError('legacy producer')):
                 self.assertEqual(server.api_generate(req,'toy'),{'id':'toy-build'})
                 self.assertEqual(producer.call_args.args[1],p)
                 req.store.film_changes_for_generate.assert_not_called()
-                req.store.put_build.assert_called_once_with(b'toy-result',{'toy':True})
+                req.store.put_build.assert_called_once_with(b'toy-result',{'toy':True,'features':['film']})
 
     def test_internal_failure_never_saved(self):
         req,p,t=self.fixture()

@@ -115,7 +115,7 @@ class RealSparse(unittest.TestCase):
             for k in ('data_verified','shared_bytes_match_reference','complete_window_coverage_verified'):self.assertIs(result['checks'][k],True)
             for k in ('production_approved','exportable','full_image_created','write_gate_open'):self.assertIs(result[k],False)
             self.assertEqual(result['checks']['selected_slots'],[s for s in range(8,12) if str(s) in changes])
-            self.assertEqual(result['current_slots'],tuple(dict(slot=s,film=changes.get(str(s),{}).get('film')) for s in range(8,12)))
+            self.assertEqual(result['current_slots'],tuple(dict(slot=s,film=changes.get(str(s),{}).get('film')) for s in (2,8,9,10,11)))
 
 class SnapshotRejection(PersistedSources):
     # Reuse fixture only; inherited checks also exercise independent fresh projects.

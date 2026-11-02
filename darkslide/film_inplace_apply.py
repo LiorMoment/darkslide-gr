@@ -1,5 +1,5 @@
 """Internal v29 complete-payload adapter. Does not grant export permission."""
-from . import inplace_generation, fwread
+from . import inplace_generation, fwread, fwaddr
 from .film_requests import FilmRequestError, validate_batch
 
 LAYOUT = inplace_generation.LAYOUT
@@ -10,7 +10,7 @@ def apply(raw, edits, *, profiles=None):
     changes = {str(e['slot']): {'film': e['film']} for e in requests}
     try:
         prepared = inplace_generation.prepare(raw, {'changes': changes}, film_profiles=profiles)
-        p = fwread.Payload(raw)
+        p = fwread.Payload(raw, fwaddr.layout()) if fwaddr.is_220() else fwread.Payload(raw)
         pending = []
         for w in prepared['windows']:
             if (type(w.address) is not int or type(w.expected) is not bytes or

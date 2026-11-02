@@ -113,7 +113,8 @@ div.chip { cursor: default; }
 .import-side { flex: 0 1 340px; display: flex; flex-direction: column; gap: 12px; justify-content: center; }
 .drop-text a { color: var(--text2, #B5B5B0); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
 .drop-text a:hover { color: var(--text); text-decoration-color: currentColor; }
-#fwDownload { margin: 0 2px 0 4px; }
+.fw-get .fw-dl { margin: 0 2px 0 4px; }
+#fwWhich:not([hidden]) { display: block; }
 .drop.await { border-color: var(--text); border-style: solid; }
 .fw-get.ready { color: var(--text); }
 .import-result { line-height: 1.7; }
@@ -691,7 +692,7 @@ div.chip { cursor: default; }
 .v1-empty b { font-size: 15px; font-weight: 500; color: var(--text); }
 .v1-empty span { font-size: 12px; color: var(--dim2); }
 .v1-empty:hover b, .v1-empty:focus-visible b { text-decoration: underline; }
-/* the four presets that can take a film LUT into the camera */
+/* presets that can take a film LUT into the camera */
 .slot { position: relative; }
 .slot .slot-lut { position: absolute; top: 0; left: 0; z-index: 1;  /* flush in the frame's top-left corner (user, 2026-10-17) */ padding: 0 2px; font-size: 6px; line-height: 8px; font-weight: 700; letter-spacing: 0.04em; color: #1C1C1B; background: #E3C94A; }
 .icon-tip { margin: 0; line-height: 1.5; }

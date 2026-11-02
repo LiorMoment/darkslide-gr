@@ -9,7 +9,8 @@ import hashlib
 from . import film_luts, film_profiles, models, photo_recipe
 
 
-def capture(store, pid, film):
+def capture(store, pid, film, model=models.GR3X):
+    """model: the project's IIIx model; built-in film data and the frozen packet are for that model."""
     uploaded_notices = {}
     if film is None:
         return dict(source=None, data_notices={})
@@ -44,10 +45,10 @@ def capture(store, pid, film):
             if headers:
                 uploaded_notices['SOURCE_LUT_'+entry['sha256']+'.txt'] = headers
     else:
-        profile = film_profiles.load_profile(film, models.GR3X.id)
+        profile = film_profiles.load_profile(film, model.id)
     # The portable encoder supplies built-in attribution from the data package,
     # but never replaces notices already frozen in a historical photo/profile.
-    value = photo_recipe.decode(photo_recipe.encode(profile, 8))
+    value = photo_recipe.decode(photo_recipe.encode(profile, 8, model.id), model.id)
     profile = value['profile']
     source = {k: copy.deepcopy(profile[k]) for k in
               ('id', 'provenance', 'photo_snapshot', 'recipe_derivation',
@@ -85,17 +86,17 @@ def metadata(bake):
                 modified_by='LiorMoment / Darkslide'), copy.deepcopy(notices)
 
 
-def attach(profile, bake):
+def attach(profile, bake, model=models.GR3X):
     derivation, notices = metadata(bake)
     result = copy.deepcopy(profile)
     result.update(recipe_derivation=derivation, data_notices=notices)
     # Reject oversize or unencodable provenance before declaring the fit ready.
-    photo_recipe.encode(result, 8)
+    photo_recipe.encode(result, 8, model.id)
     return result
 
 
-def verify(profile, bake):
+def verify(profile, bake, model=models.GR3X):
     derivation, notices = metadata(bake)
     if profile.get('recipe_derivation') != derivation or profile.get('data_notices') != notices:
         raise ValueError('调色拟合与来源记录不一致，请重新拟合')
-    photo_recipe.encode(profile, 8)
+    photo_recipe.encode(profile, 8, model.id)

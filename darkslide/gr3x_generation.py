@@ -11,19 +11,22 @@ import time
 from . import camera_features, models, fwread, package, package_inspect, compositor, composite_verify, rescue_gate
 from . import edit_core, generate, film_requests, film_profiles, film_writer, body_target, menu_language
 from . import gr3x_inplace, gr3x_inplace_integrity, gr3x_inplace_readback
+from .fwaddr import A as fa
+from . import fwaddr
 
 LAYOUT = 'gr3x160_inplace_candidate_v1'
 NOTE = 'GR IIIx 1.60 固件；标准版已有用户实机刷入使用，城市版、HDF 及刷回官方 1.60 未实机验证。'
+NOTE_170 = 'GR IIIx 1.70 固件（理光 2026-10-21 发布）；DARKSLIDE GR 的适配只做了离线核对，还没有在任何 GR IIIx 1.70 上刷入实测，刷回官方 1.70 也未验证。'
 
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def _iiix_title(check):
-    """Shared Chinese check titles, with the two GR III-specific wordings switched to IIIx 1.60."""
+def _iiix_title(check, model=models.GR3X):
+    """Shared Chinese check titles, with the two GR III-specific wordings switched to this IIIx firmware."""
     title = generate.CHECK_TITLES.get(check['id'], check.get('title', check['id']))
-    return title.replace('GR III 2.10', 'GR IIIx 1.60').replace('版本保持 2.10', '版本保持 1.60')
+    return title.replace('GR III 2.10', 'GR IIIx ' + model.firmware).replace('版本保持 2.10', '版本保持 ' + model.firmware)
 
 
 def ordinary(official, edits, template, jpeg):
@@ -36,17 +39,22 @@ def ordinary(official, edits, template, jpeg):
     return official, [dict(id='official_ordinary_base', ok=True, title='普通编辑基线为官方原件')]
 
 
-def curve_candidate(official, edits, template, profiles, jpeg):
+def curve_candidate(official, edits, template, profiles, jpeg, model=models.GR3X):
+    """model: GR IIIx 1.60, or 1.70 inside fwaddr.firmware(model) (the 1.60 film data serve both)."""
     requests = [e for e in edits if e['kind']=='film']
     plain, checks = ordinary(official,[e for e in edits if e['kind']!='film'],template,jpeg)
     if not requests:
         return plain, checks
-    source = package.Package.read(official, models.GR3X.id)
+    source = package.Package.read(official, model.id)
     before = source.image
-    resolved = film_writer.resolve_profiles(requests,profiles,models.GR3X.id)
+    resolved = film_writer.resolve_profiles(requests,profiles,model.id)
     plan = gr3x_inplace.plan_offline(before,requests,resolved)
+    from .iiix_prepare import layout_for
+    expected_layout = layout_for(requests, model)
+    if plan.get('layout') != expected_layout or plan.get('decoded_growth_bytes') != 0:
+        raise generate.GenerateError('IIIx 胶片选择与生成布局不一致')
     changed = bytearray(fwread.unpack(plain))
-    p = fwread.Payload(before,models.layout(models.GR3X))
+    p = fwread.Payload(before,models.layout(model))
     actual = []
     for w in plan['windows']:
         at=p.off(w.address);end=at+len(w.expected)
@@ -54,7 +62,7 @@ def curve_candidate(official, edits, template, profiles, jpeg):
             raise generate.GenerateError('普通编辑与胶片写入位置冲突')
         changed[at:end]=w.replacement
         actual.append((at,end,w.address))
-    base = package.Package.read(plain,models.GR3X.id)
+    base = package.Package.read(plain,model.id)
     output, _, _, _ = package.pack_change(plain,base.image,
         base.frames, base.stream_end, base.trailer.values(),bytes(changed),
         [dict(offset=a,length=b-a,what='IIIx film') for a,b,_ in actual])
@@ -63,7 +71,9 @@ def curve_candidate(official, edits, template, profiles, jpeg):
     from collections import namedtuple
     Window=namedtuple('ReadWindow','address expected replacement')
     windows=tuple(Window(address,before[a:b],after[a:b]) for a,b,address in actual)
-    evidence=gr3x_inplace_integrity.verify(before,windows,{e['slot']:e['film'] for e in requests},resolved,layout=gr3x_inplace_readback.LAYOUT)
+    evidence=gr3x_inplace_integrity.verify(before,windows,{e['slot']:e['film'] for e in requests},resolved,layout=expected_layout)
+    if evidence.get('layout') != expected_layout or evidence.get('selected_slots') != sorted(e['slot'] for e in requests):
+        raise generate.GenerateError('IIIx 独立读回布局或选择不一致')
     restored=bytearray(after)
     for a,b,_ in actual:restored[a:b]=baseline[a:b]
     if (len(after)!=len(before) or restored[:-4]!=baseline[:-4] or
@@ -88,7 +98,7 @@ def extension_body(official, output, body, shutdown_jpeg=None):
     rows=[]
     for window in report['protected_windows']:
         start,end=int(window['start'],16),int(window['end_exclusive'],16)
-        if not (0x53000000<=start<end<=0x540b55c0):
+        if not (fa(0x53000000)<=start<end<=fa(0x540b55c0)):
             raise generate.GenerateError('保护窗不在原 RTOS 范围')
         rows.append(dict(window,unchanged=hdf_guard.window(before,start,end)==hdf_guard.window(after,start,end)))
     changed=[r['name'] for r in rows if not r['unchanged']]
@@ -98,7 +108,7 @@ def extension_body(official, output, body, shutdown_jpeg=None):
         try:street=gr3x_street_read.verify(before,after,shutdown_jpeg)
         except (ValueError,TypeError,IndexError,struct.error) as exc:
             raise generate.GenerateError('Street 条件分流核对失败：'+str(exc)) from exc
-        allowed=[r['name'] for r in rows if int(r['start'],16)==0x5319f180 and int(r['end_exclusive'],16)==0x5319f2bc]
+        allowed=[r['name'] for r in rows if int(r['start'],16)==fa(0x5319f180) and int(r['end_exclusive'],16)==fa(0x5319f2bc)]
         if len(allowed)!=1 or changed!=allowed:
             raise generate.GenerateError('Street 之外的保护窗改变')
     else:
@@ -121,11 +131,21 @@ def run(store, project, template, official, *, recipe_extension=False):
     saved=copy.deepcopy(store.get_project(project['id']));template=copy.deepcopy(template)
     if saved!=project or saved.get('unsaved'):
         raise generate.GenerateError('工程未保存或已改变')
-    if models.for_project(saved)!=models.GR3X or models.for_template(template)!=models.GR3X:
-        raise generate.GenerateError('候选仅适用于 IIIx 1.60')
+    model=models.for_project(saved)
+    if model not in (models.GR3X,models.GR3X_170) or models.for_template(template)!=model:
+        raise generate.GenerateError('候选仅适用于 IIIx 1.60 / 1.70')
+    if recipe_extension and model!=models.GR3X:
+        raise generate.GenerateError('照片配方模块只在 GR IIIx 1.60 上有')
+    with fwaddr.firmware(model):
+        return _run(store,saved,template,official,model,recipe_extension)
+
+
+def _run(store, saved, template, official, model, recipe_extension):
     pending = camera_features.refusal(saved.get('camera_features'))
-    if pending:   # 柔光 / 65:24 are not in the firmware generation yet: refused, never left out
+    if pending:
         raise generate.GenerateError(pending)
+    if (saved.get('camera_features') or {}).get('wide_ratio') and body_target.is_hdf(body_target.of(saved)):
+        raise generate.GenerateError("16:9 和 65:24 宽幅还不支持 HDF 机身；请先把开关关掉，或选非 HDF 的机身")
     from . import menu_order
     unreadable=saved.get('menu_order_unreadable') or (saved.get('draft') or {}).get('menu_order_unreadable')
     if unreadable:
@@ -137,10 +157,10 @@ def run(store, project, template, official, *, recipe_extension=False):
         raise generate.GenerateError('还没有改动')
     try:
         edit_core._template(template)
-        body=body_target.require_family(body_target.of(saved),'GR IIIx','1.60')
+        body=body_target.require_family(body_target.of(saved),'GR IIIx',model.firmware)
         if body is None:raise generate.GenerateError('请先选择具体机身版本')
-        source=store.input_path(models.GR3X.input_sha)
-        if type(official) is not bytes or len(official)!=models.GR3X.input_size or sha(official)!=models.GR3X.input_sha or source.read_bytes()!=official:
+        source=store.input_path(model.input_sha)
+        if type(official) is not bytes or len(official)!=model.input_size or sha(official)!=model.input_sha or source.read_bytes()!=official:
             raise generate.GenerateError('IIIx 官方原件身份不一致')
         revision=film_profiles.data_revision()
         effective=store.film_changes_for_generate(saved['id'],saved.get('changes',{}))
@@ -168,16 +188,16 @@ def run(store, project, template, official, *, recipe_extension=False):
             layout=gr3x_recipe_archive.LAYOUT
             extension={k:result[k] for k in ('recipe_extension_bytes','extension_sha256','native_source_sha256','native_code_sha256','snapshot_numeric_sha256','overlap_addresses')}
         else:
-            output,checks=curve_candidate(official,edits,template,profiles,jpeg)
-            old_footer, old_aux, _ = package_inspect.inspect(official, models.GR3X.id)
-            new_footer, new_aux, _ = package_inspect.inspect(output, models.GR3X.id)
+            output,checks=curve_candidate(official,edits,template,profiles,jpeg,model)
+            old_footer, old_aux, _ = package_inspect.inspect(official, model.id)
+            new_footer, new_aux, _ = package_inspect.inspect(output, model.id)
             payload = bytes(fwread.unpack(output))
             checks.append(dict(id='iiix_independent_container', title='独立读取文件边界、原头、附加段及双层校验和',
                 ok=(old_footer[:3] == new_footer[:3] and old_footer[4] == new_footer[4] and old_aux == new_aux
                     and output[:128] == official[:128]
                     and sum(v[0] for v in struct.iter_unpack('<I', output)) & 0xffffffff == 0
                     and sum(v[0] for v in struct.iter_unpack('<I', payload)) & 0xffffffff == 0)))
-            checks+=rescue_gate.gate(official,output,models.GR3X.id)
+            checks+=rescue_gate.gate(official,output,model.id)
             report=body_target.build_report(bytes(fwread.unpack(official)),body,bytes(fwread.unpack(output)))
         checks.append(dict(id='body_protected_windows',title='IIIx 机身保护窗核对',ok=report['status'] in ('protected_windows_unchanged','protected_windows_with_verified_shutdown_hook'),detail=body_target.summary(report)))
         if not checks or not all(c.get('ok') is True for c in checks):
@@ -190,23 +210,30 @@ def run(store, project, template, official, *, recipe_extension=False):
             raise generate.GenerateError('生成期间工程、原件或配方来源改变')
         before,after=bytes(fwread.unpack(official)),bytes(fwread.unpack(output))
         manifest=dict(schema=1,project_id=saved['id'],project_title=saved['title'],project_version=len(saved.get('versions',[])),
-            template_id=template['id'],model=models.GR3X.name,firmware=models.GR3X.firmware,
-            created_at=time.strftime('%Y-%m-%dT%H:%M:%S%z'),input_sha256=models.GR3X.input_sha,output_sha256=sha(output),
-            output_filename=models.GR3X.filename,payload_sha256_before=sha(before),payload_sha256_after=sha(after),
+            template_id=template['id'],model=model.name,firmware=model.firmware,
+            created_at=time.strftime('%Y-%m-%dT%H:%M:%S%z'),input_sha256=model.input_sha,output_sha256=sha(output),
+            output_filename=model.filename,payload_sha256_before=sha(before),payload_sha256_after=sha(after),
             input_bytes=len(official),output_bytes=len(output),encoded_growth_bytes=len(output)-len(official),
             container_encoding="stored_frames" if recipe_extension else "preserve_original_frames_except_changes",
             decoded_growth_bytes=len(after)-len(before),curve_growth_bytes=0,firmware_layout=layout,
-            checks=[dict(c,title=_iiix_title(c)) for c in checks],
+            checks=[dict(c,title=_iiix_title(c,model)) for c in checks],
             summary=generate.summarize(effective,template,include_films=True,order=order,features=features),menu_language=menu_lang,features=sorted({e['kind'] for e in edits}|({'photo_recipe'} if recipe_extension else set())|({'shutdown'} if jpeg else set())),
             experimental=True,production_approved=False,camera_verified=False,product_download_enabled=True,
-            film_data_revision=revision,body=report,recipe_extension=extension,verification=NOTE,
-            rescue=dict(official_file=models.GR3X.filename,official_sha256=models.GR3X.input_sha,how='IIIx 实机安装及同版本回刷待验证'))
+            film_data_revision=revision,body=report,recipe_extension=extension,verification=NOTE if model==models.GR3X else NOTE_170,
+            rescue=dict(official_file=model.filename,official_sha256=model.input_sha,how='IIIx 实机安装及同版本回刷待验证'))
         if jpeg is not None:
-            manifest['body']['shutdown_routes']=body_target.shutdown_report(body)
+            manifest['body']['shutdown_routes']=body_target.shutdown_report(body,model)
             if report.get('shutdown_conditional'):
                 manifest['body']['shutdown_routes']['conditional_request_3']=copy.deepcopy(report['shutdown_conditional'])
-        if features.get('soft_glow'):
+        if requests:
+            from .iiix_prepare import layout_for
+            manifest['film_layout'] = layout_for(requests, model)
+        if features.get('soft_glow') and not features.get('wide_ratio'):
             manifest['verification']+=' '+generate.SOFT_GLOW_NOTE
+        if features.get('wide_ratio'):
+            manifest['verification']+=' '+generate.WIDE_RATIO_IIIX_NOTE
+        if features.get('date_stamp'):
+            manifest['verification']+=' '+generate.DATE_STAMP_NOTE
         if order is not None:
             manifest['menu_order']=dict(order,video_policy=menu_order.VIDEO_POLICY)
             manifest['verification']+=' 影像控制菜单的新顺序还没在 GR IIIx 上实测：刷后请看拍照、视频、RAW 显影里的列表顺序，选中后拍出的风格和名称是否一致，关机重开和 U1–U3 里存的风格有没有变。'

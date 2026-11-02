@@ -11,14 +11,20 @@ def validate_request(edit):
                      'grain requires built-in negative slot12/mode22; custom banks unsupported')
 
 
+# (descriptor row, item list) of the Negative Film detail menu. 2.20 / IIIx 1.70 hold the same bytes
+# at new addresses (checked 2026-10-25).
+ADDRESSES = {False: (0x53B348BC, 0x53B3500C), True: (0x53B341E4, 0x53B34934)}
+
+
 def apply(before, model_id=None):
     model = models.get(model_id)
-    builder._require(type(before) is bytes and len(before) == builder.PAYLOAD_SIZE and
+    builder._require(type(before) is bytes and len(before) == (model.payload_size if models.is_220(model) else builder.PAYLOAD_SIZE) and
                      builder._sha(before) == model.payload_sha, 'immutable official payload required')
-    row = 0x53B348BC - 0x53000000 + 0x10870
-    start = 0x53B3500C - 0x53000000 + 0x10870
+    row_va, list_va = ADDRESSES[models.is_220(model)]
+    row = row_va - 0x53000000 + 0x10870
+    start = list_va - 0x53000000 + 0x10870
     tail = start + 18
-    builder._require(before[row:row+8] == struct.pack('<II', 0x53B3500C, 9),
+    builder._require(before[row:row+8] == struct.pack('<II', list_va, 9),
                      'negative descriptor mismatch')
     builder._require(before[start:tail] == bytes.fromhex('0200020102020203020402050206020d000e'),
                      'negative nine-item list mismatch')

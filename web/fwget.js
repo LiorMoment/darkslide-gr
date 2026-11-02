@@ -4,10 +4,11 @@
   const line = document.getElementById("fwGet");
   if (!line) return;
   const orig = line.innerHTML;
-  // Delegated, because the line is rebuilt: after a click it only names the file the link gave
-  // (gr3_v210.zip or gr3x_v160.zip), and switching series puts the link back (window.resetFwGet).
+  // Delegated, because the line is rebuilt: after a click it only names the file the clicked link
+  // gave (one of several versions, e.g. gr3_v220.zip or gr3_v210.zip), and switching series puts
+  // the links back (window.resetFwGet).
   line.addEventListener("click", (e) => {
-    const link = e.target.closest("#fwDownload");
+    const link = e.target.closest("a.fw-dl");
     if (!link) return;
     line.classList.add("ready");
     line.textContent = "下载好了？直接把 " + link.href.split("/").pop() + " 拖进来。";

@@ -166,9 +166,12 @@
   // ---- camera bake end
 
   // ---------------------------------------------------------------- panel
-  // writable: whether this preset can take colour into the camera (the four film presets).
+  // writable: whether this preset can take colour into the camera.
   function render(slot, g, note, writable) {
     const body = $("adjustBody");
+    // Every change redraws the panel; keep keyboard focus on the slider being moved, so arrow keys go on
+    // stepping it instead of stopping after one step.
+    const was = document.activeElement, focusKey = was && body.contains(was) ? was.dataset.adjKey : undefined;
     const blocks = GROUPS.map((grp) => {
       const box = document.createElement("div");
       box.className = "adj-group";
@@ -198,9 +201,13 @@
       return box;
     });
     // user, 2026-10-17: no standing explanation for the presets that write into the camera.
-    if (!writable) note = "这个预设只能预览和导出 LUT，右边的调整不会写进相机。能写进相机的是银流冲洗、怀旧、HDR 色调、交叉冲洗。";
+    if (!writable) note = "这个预设只能预览和导出 LUT，右边的调整不会写进相机。能写进相机的是鲜艳、银流冲洗、怀旧、HDR 色调、交叉冲洗。";
     if (note) { const n = document.createElement("p"); n.className = "adj-note adj-from" + (writable ? "" : " adj-warn"); n.textContent = note; blocks.unshift(n); }
     body.replaceChildren(...blocks);
+    if (focusKey) {
+      const again = body.querySelector('input[data-adj-key="' + focusKey + '"]');
+      if (again) again.focus({ preventScroll: true });
+    }
   }
 
   // range: [min, max] this slider can reach on its own with the current film and still go into
@@ -214,6 +221,7 @@
     const input = document.createElement("input");
     Object.assign(input, { type: "range", min: -100, max: 100, step: 1, value: v });
     input.setAttribute("aria-label", hsl ? HUES[ui.hue][0] + " " + label : label);
+    input.dataset.adjKey = hsl ? key + ui.hue : key;
     const shown = document.createElement("span"); shown.className = "adj-val mono"; shown.textContent = (v > 0 ? "+" : "") + v;
     input.addEventListener("input", () => { shown.textContent = (+input.value > 0 ? "+" : "") + input.value; });
     input.addEventListener("change", () => update((n) => {

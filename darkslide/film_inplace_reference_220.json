@@ -1,0 +1,105 @@
+{
+ "schema": 1,
+ "layout": "inplace_history_cache_exit_v29",
+ "original_sha256": "5b475fcc434dec0f12e7956b02b5b38959d599b7a4ff90486263c46816a21b6d",
+ "candidate_source_sha256": "9eb72ac69ddb302a56b87256820cf27f0aad049a97da69068111cdc7a6a624e5",
+ "provenance": "GR III 2.20 v29 reference, captured by tools/capture_v29_reference_220.py after the relocation equivalence with 2.10 (all 15 masks), the shipped-bundle/direct-assembly match, relocated 2.10 ranges and the 2.20 HDF windows. Also used by GR IIIx 1.70. Equality detects drift, not independent ARM semantic proof. film_inplace_cache.py sha256 53ce15c36cdeca6a1edc72f82b7c3a92973d8e18e64a122867f920183f9a0388",
+ "masks": {
+  "0": {
+   "shared_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "shared_bytes": 0,
+   "coverage_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "total_bytes": 0
+  },
+  "1": {
+   "shared_sha256": "86cb5239faf6da4fb4b02ee3261c7d878d20b8307a877d407827532f1e3774e4",
+   "shared_bytes": 2060,
+   "coverage_sha256": "405cf4ce7d16192af9907d8674673307bb6be0c42a9e4425da66c273bd7549b9",
+   "total_bytes": 2532
+  },
+  "2": {
+   "shared_sha256": "580ecdded46e2740a9eb60b7903de7f03b4cfaf542cd51cbd527f3f5bc588d22",
+   "shared_bytes": 2060,
+   "coverage_sha256": "d9f40dd9e912d0d1168305b84c0e52ab3b142b868664f10854c9ddda6eca65c1",
+   "total_bytes": 2524
+  },
+  "3": {
+   "shared_sha256": "1e89d79e6d281d4180721dbf3ab3a06c8f1006bd136e56c780d77ff3aed11394",
+   "shared_bytes": 2588,
+   "coverage_sha256": "69062cd0011a94dc4d6ec06b8a072d052557683ab381e88ec93b0517f94b9265",
+   "total_bytes": 3364
+  },
+  "4": {
+   "shared_sha256": "094075ee97c9fdc13ca3d1795786c89e35ee43de8054faea36144ac2dd9642ff",
+   "shared_bytes": 1992,
+   "coverage_sha256": "dc020604f778b84248e63131f41b5a700a77140d7ed17e822ba0fcbb0ec9ee56",
+   "total_bytes": 2460
+  },
+  "5": {
+   "shared_sha256": "8f683447267650faf1d689523f067c156c19484f722cac81764ab6d9432cd875",
+   "shared_bytes": 2520,
+   "coverage_sha256": "7393da10493d18d68e61d11a12df5e51146c390080d953cd4bea001a9c127c4f",
+   "total_bytes": 3300
+  },
+  "6": {
+   "shared_sha256": "98db6c2ab2f1e107858189794281da14c3cede416b10aca03b19f4ed75943587",
+   "shared_bytes": 2520,
+   "coverage_sha256": "0ad495130332926132b86d254a7a5295d262d9726b7f3fa3e4e4751b0b4419c4",
+   "total_bytes": 3292
+  },
+  "7": {
+   "shared_sha256": "97a6546e78b048ee109a11102966a3ab65c0e367443453e1fa73a88add8ae9fc",
+   "shared_bytes": 3048,
+   "coverage_sha256": "d2a38497ef53be7f26feb6587ca9d6243cef232edc27dcab4f029a5672417e72",
+   "total_bytes": 4132
+  },
+  "8": {
+   "shared_sha256": "6db3b9ae99d93b26f31130902f33d7c88a24f78b683b0e15be4f6441228f5b0e",
+   "shared_bytes": 2060,
+   "coverage_sha256": "588694683a8d6295b387c51d44e6b1c954c4ddeff855215377f4fd8bb5e8b798",
+   "total_bytes": 2524
+  },
+  "9": {
+   "shared_sha256": "413e2f6c00b13e21f5e966c0b43e0a257d5116a811c0b0394c5225d2d9c69828",
+   "shared_bytes": 2588,
+   "coverage_sha256": "a32d56c3bb486985f3d71aae260d3a1dbee6ad05d9cd77e527aefbd96daac016",
+   "total_bytes": 3364
+  },
+  "10": {
+   "shared_sha256": "cf8a86b5751416443084ed57027dfd801dad460f0d6b2bf9d5cf901ed3285630",
+   "shared_bytes": 2588,
+   "coverage_sha256": "283f15eafb4ae48c2ed7bd7926bf88974aba6ee954d53a75b1272e614448305e",
+   "total_bytes": 3356
+  },
+  "11": {
+   "shared_sha256": "0eecd243b4430560df18c1dbcd3bea249b33c65b8ef8d6ce15d825ece1556a11",
+   "shared_bytes": 3116,
+   "coverage_sha256": "a8138cfa8e20799aea8e2516c69e76f33ec922ae7e4befda1430ada99f03111a",
+   "total_bytes": 4196
+  },
+  "12": {
+   "shared_sha256": "c1292dfc270afe780749a1c0f59953fa7c47bdfe3dc2bbd6dc409e8afb838f4d",
+   "shared_bytes": 2520,
+   "coverage_sha256": "4a9e2e4aba06952566f450f0d719ac15c8b0bf9886556de61f9e134dd1bed26e",
+   "total_bytes": 3292
+  },
+  "13": {
+   "shared_sha256": "52528aa79839f5186cab983a1cc700637056d6a012bda5f9dc19b510d43642e1",
+   "shared_bytes": 3048,
+   "coverage_sha256": "719e4e88247ca5325a5974913bffce6ce551619afa3c713c9de153bc7a227bf7",
+   "total_bytes": 4132
+  },
+  "14": {
+   "shared_sha256": "d6fe417dc9e144d23b481bba108de9dec64db98bede117e3796658fb07c21abb",
+   "shared_bytes": 3048,
+   "coverage_sha256": "4be7669246a7b48abbc17ca817d2cd2e66882ba0149cd7c22b2ed7b41a7e70c6",
+   "total_bytes": 4124
+  },
+  "15": {
+   "shared_sha256": "2290a5d72544accf684df6306d54ba3b31d10aa34feefb8102f14426fd349f79",
+   "shared_bytes": 3576,
+   "coverage_sha256": "92b0f81fea5f2583c2cebea075f949f62f97a2f43a92d43853abeec4204a0157",
+   "total_bytes": 4964
+  }
+ }
+}

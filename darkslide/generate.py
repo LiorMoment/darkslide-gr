@@ -8,7 +8,7 @@ import copy
 import hashlib
 import json
 
-from . import body_target, camera_features, composite_verify, compositor, fwread, menu_order, names, pngcheck, rescue_gate, film_requests, template as tpl, menu_language
+from . import body_target, camera_features, composite_verify, compositor, fwread, menu_order, names, pngcheck, rescue_gate, film_requests, template as tpl, menu_language, models
 
 
 # Display titles for the composite checker's ids (presentation only).
@@ -24,18 +24,20 @@ CHECK_TITLES = {
     "payload_sum": "解码数据加和为 0",
     "icon_name_expected": "按请求独立推导图标和预设名的预期内容",
     "a_path_five_requests_fixed_slot_jpeg": "关机图：五个入口指向同一位置、A 盘路径、图片只多出填充段",
+    "a_path_seven_requests_fixed_slot_jpeg": "关机图：七个入口（含 20、30 周年）指向同一位置、A 盘路径、图片只多出填充段",
     "entire_payload_matches_independent_request": "整份解码数据与独立推导的预期逐字节一致（没有任何越界改动）",
     "payload_sha": "解码数据 SHA 与生成记录一致",
     "readback_icons_names": "读回 14 个预设的图标和预设名（英文、简中、繁中、日文）",
     "grain_menu_expected": "负片颗粒菜单项、原九项和相邻字符串独立核对",
     "menu_order_tables": "影像控制菜单顺序：三组拍照表、三组视频表和 RAW 显影选项表与所选顺序一致（独立核对）",
-    "soft_glow_windows": "柔光 v22.6：两个柔光模块、图像管线挂钩和 ADJ 图标与交付的测试固件逐字节一致（独立核对）",
+    "soft_glow_windows": "柔光：两个柔光模块、图像管线挂钩和 ADJ 图标写入的内容与固定资源逐字节一致（只说明写入内容，不代表这个机型或组合已实测）",
+    "wide_ratio_windows": "画幅（装了日期印记时含日期模块）：菜单、ADJ、JPEG 裁切、取景遮挡、拍后回显和 65:24 对焦范围写入的内容与固定资源逐字节一致（只说明写入内容，不代表这个机型或组合已实测）",
     "film_requested_data": "胶片记录、矩阵和完整曲线与所选数据一致",
     "film_code_fields_and_targets": "胶片跳转、选择和后矩阵指令独立核对",
     "film_unselected_and_original_protected": "未选胶片槽位和受保护原厂数据保持不变",
     "body_protected_windows": "所选机身的 HDF 保护窗原字保持（有界核对，不代表兼容）",
     "film_inplace_data_verified": "胶片数据（记录、矩阵、曲线）按所选胶片独立读回一致",
-    "film_inplace_shared_bytes_match_reference": "四卷共用的固定字节与核对过的参考版本逐字节相同",
+    "film_inplace_shared_bytes_match_reference": "胶片共用的固定字节与核对过的参考版本逐字节相同",
     "film_inplace_complete_window_coverage_verified": "改动范围与声明的胶片窗口完全吻合，没有多改也没有漏改",
     "film_layout": "胶片写入方式：原位替换，不扩容",
     "film_closed_failure": "胶片独立读回出错",
@@ -100,7 +102,11 @@ def edits_from_changes(store, project_id, changes, template, *, include_films=Fa
 def summarize(changes, template, *, include_films=False, order=None, features=None):
     out = []
     if (features or {}).get("soft_glow"):
-        out.append(dict(slot=None, preset="柔光", what="整台相机", value="打开（v22.6）：在 ADJ 里开关柔光"))
+        out.append(dict(slot=None, preset="柔光", what="整台相机", value="打开：在 ADJ 里开关柔光"))
+    if (features or {}).get("wide_ratio"):
+        out.append(dict(slot=None, preset="画幅", what="整台相机", value="新增 16:9 和 65:24：只裁 JPEG，RAW 保持完整 3:2"))
+    if (features or {}).get("date_stamp"):
+        out.append(dict(slot=None, preset="日期印记", what="整台相机", value="装进相机：在设置页末页打开，默认关；只印 JPEG，RAW 不印"))
     if order is not None:
         out.append(dict(slot=None, preset="影像控制菜单", what="菜单顺序",
                         value="%s，自定义 1、2 在最后；视频列表跟着照片顺序（原本就没有柔和单色和 HDR 色调）" %
@@ -124,9 +130,15 @@ def summarize(changes, template, *, include_films=False, order=None, features=No
     return out
 
 
-# 柔光 v22.6: what has and has not been on a camera (both generation routes add it).
-SOFT_GLOW_NOTE = ("柔光用的是 v22.6：柔光效果和用户在普通 GR III 上实测没问题的 v22.4 逐字节相同；"
-                  "v22.6 新画的 ADJ 柔光图标、柔光和其他改动一起装、GR IIIx 和 HDF 机身上的柔光都还没实测。")
+# What has and has not been on a camera (both generation routes add it).
+DATE_STAMP_NOTE = "日期印记没有在任何相机上试过：刷后在设置页末页打开「日期」，拍 JPEG 和 RAW+JPEG 各一张，看字在画面右下角、时间对不对、RAW 没有被写，再切 16:9 和 65:24 各拍一张。离线模拟不能保证相机上的保存和故障行为，单独的诊断版在部分拒绝条件下可能印出诊断码。"
+WIDE_RATIO_NOTE = ("只装画幅的版本没有单独实测；街拍版、日记版用同一个固件，已适配、未实测。这个版本改动了按住 MENU 开机路径上的几处代码，"
+                   "万一进不了更新界面，只能尝试救机工具或送修，不保证能救回。拍完会先闪一下 3:2 再显示宽幅，"
+                   "65:24 的跟踪对焦可能超出保留画面，这两点是已知现象。")
+WIDE_RATIO_IIIX_NOTE = ("画幅（以及和它一起开的柔光）在 GR IIIx 上已适配、未实测：离线核对都通过了，还没有人在 GR IIIx 上刷过，包括按住 MENU 开机刷回官方固件。"
+                        "这个版本改动了按住 MENU 开机路径上的几处代码，万一进不了更新界面，只能尝试救机工具或送修，不保证能救回。")
+WIDE_GLOW_NOTE = "一个包含第五槽、画幅和柔光的测试包已在一台普通 GR III 2.10 上试用并刷回官方一次；本次配置及其他机身仍需验证。"
+SOFT_GLOW_NOTE = "柔光用的是优化版，光晕半径约为旧版的 80%。一个含柔光、画幅和五卷胶片的测试包在一台普通 GR III 2.10 上测过主要用法；单独柔光和其他配置仍需验证。"
 
 
 # Presets whose icon / name changes have been flashed and checked on a GR III so far.
@@ -140,7 +152,7 @@ def body_check(official_bin, output, body, template, has_shutdown):
         return [], dict(target_body=None, label=body_target.UNSPECIFIED)
     try:
         report = body_target.build_report(bytes(fwread.unpack(official_bin)), body, bytes(fwread.unpack(output)))
-        shutdown = body_target.shutdown_report(body) if has_shutdown else None
+        shutdown = body_target.shutdown_report(body, models.for_template(template)) if has_shutdown else None
     except (body_target.BodyTargetError, ValueError) as exc:
         raise GenerateError("机身保护窗核对出错：%s" % exc) from exc
     ok = report["status"] == "protected_windows_unchanged"
@@ -158,6 +170,15 @@ def body_check(official_bin, output, body, template, has_shutdown):
 
 def verification_note(edits, template, body=None, has_shutdown=False):
     """Say which parts of this build were tested on a camera, without stretching it to newly opened presets."""
+    family = models.for_template(template)
+    if models.is_220(family):
+        # Nothing has been flashed on 2.20 / 1.70 yet: never borrow the 2.10 camera tests.
+        # One sentence per case, so the page can translate it whole.
+        if body_target.is_hdf(body):
+            return ("离线核对通过。%s %s 是理光 2026-10-21 发布的新固件，DARKSLIDE GR 对它的全部适配（图标、预设名、负片颗粒、菜单顺序、胶片、柔光、关机画面）目前只做了离线核对，还没有在任何相机上刷入实测，%s 机身同样未实测，离线只核对了已知的 HDF 路径没被改到：刷后请逐项看影像控制菜单、拍摄画面、胶片和柔光效果、关机画面、回放详情和关机重开后的设置。刷机风险自负，刷机前请备好官方 %s 救机卡。"
+                    % (family.name, family.firmware, body, family.firmware))
+        return ("离线核对通过。%s %s 是理光 2026-10-21 发布的新固件，DARKSLIDE GR 对它的全部适配（图标、预设名、负片颗粒、菜单顺序、胶片、柔光、关机画面）目前只做了离线核对，还没有在任何相机上刷入实测：刷后请逐项看影像控制菜单、拍摄画面、胶片和柔光效果、关机画面、回放详情和关机重开后的设置。刷机风险自负，刷机前请备好官方 %s 救机卡。"
+                % (family.name, family.firmware, family.firmware))
     untested = sorted({e["slot"] for e in edits if e["kind"] in DEVICE_TESTED and e["slot"] not in DEVICE_TESTED[e["kind"]]})
     note = "离线核对通过。开放的 12 个预设的图标和预设名（含加长到上限的预设名）已在一台 GR III 上一起刷入实测；关机画面、负片颗粒单独改和与图标、预设名一起改也已实测；你填的具体内容未经实测。"
     if untested:
@@ -165,10 +186,16 @@ def verification_note(edits, template, body=None, has_shutdown=False):
         note += "这次改到的 " + names + " 是新开放的预设，还没在相机上实测：刷后请看影像控制菜单、拍摄画面、回放详情，以及其他菜单里有没有意外出现你改的名称或图标。"
     if any(e["kind"] == "soft_glow" for e in edits):
         note += SOFT_GLOW_NOTE
+    if any(e["kind"] == "wide_ratio" and e["glow"] for e in edits):
+        note += WIDE_GLOW_NOTE
+    if any(e["kind"] == "wide_ratio" for e in edits):
+        note += WIDE_RATIO_NOTE
+    if any(e["kind"] == "wide_ratio" and e.get("date") for e in edits):
+        note += DATE_STAMP_NOTE
     if any(e["kind"] == "menu_order" for e in edits):
         note += "影像控制菜单的新顺序在普通 GR III 上已实测，其他机身还没有：刷后请看拍照、视频、RAW 显影里的列表顺序，选中后拍出的风格和名称是否一致，关机重开和 U1–U3 里存的风格有没有变。"
     if any(e["kind"] == "film" for e in edits):
-        note += "用户已反馈普通 GR III 的 Gold 200、Portra 400、Ektar 100、5219 四卷候选实测正常，测试项目未逐项记录；不代表本次配置或其他机型均已实测，离线读回不能证明实际成像效果。"
+        note += "用户已反馈普通 GR III 2.10 的 Portra 160、Gold 200、Portra 400、Ektar 100、5219 五卷组合功能基本正常，测试项目未逐项记录；不代表本次配置或其他机型均已实测，离线读回不能证明实际成像效果。"
     if body_target.is_hdf(body):
         note += "以上实测都在普通版 GR III 上做的，%s 机身还没有实测；离线只核对了已知的 HDF 路径没被改到。" % body
     if body is not None and has_shutdown:
@@ -181,7 +208,7 @@ def run(store, project, template, official_bin, *, film_profiles=None):
     core applies everything to one official payload and packs once; the
     composite checker re-derives the expected payload and reads it all back."""
     if film_requests.needs_closed_output(project.get("changes") or {}):
-        raise GenerateError("胶片或四位置调色的完整输出尚未开放，请使用只读核对")
+        raise GenerateError("胶片或可替换位置调色的完整输出尚未开放，请使用只读核对")
     return _run(store, project, template, official_bin, film_profiles=film_profiles)
 
 
@@ -218,6 +245,8 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
         body = body_target.require_family(body_target.of(project), template.get("model"), template.get("firmware"))
     except body_target.BodyTargetError as exc:
         raise GenerateError(str(exc)) from exc
+    if camera_on.get("wide_ratio") and body_target.is_hdf(body):
+        raise GenerateError("16:9 和 65:24 宽幅还不支持 HDF 机身；请先把开关关掉，或选非 HDF 的机身")
     # Cloud supplies already-fitted camera data. Freeze the handoff once so
     # writing and independent readback observe the same request inputs.
     profiles_snapshot=copy.deepcopy(film_profiles)
@@ -244,7 +273,8 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
         raise GenerateError("胶片写入尚未开启，当前选择仅用于近似预览")
     # The writer and the independent check both use the layout named here, never one
     # read back from the result.
-    layout = ('inplace_history_cache_exit_v29' if inplace else film_requests.FILM_LAYOUT) if any(e["kind"] == "film" for e in edits) else "legacy_arena_v1"
+    from .inplace_generation import layout_for
+    layout = (layout_for(pending_films, models.for_template(template)) if inplace else film_requests.FILM_LAYOUT) if any(e["kind"] == "film" for e in edits) else "legacy_arena_v1"
     try:
         if inplace:
             result = compositor.build_inplace_composite(official_bin, edits, template, jpeg,
@@ -259,7 +289,8 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
     if not composite_verify.all_ok(checks):
         raise GenerateError("独立核对没有全部通过，不输出文件", checks)
     # Third layer, blind to the request: can the official 2.10 package still rescue the camera?
-    rescue = rescue_gate.gate(official_bin, result["output"])
+    family = models.for_template(template)
+    rescue = rescue_gate.gate(official_bin, result["output"], family.id)
     checks += rescue
     if not rescue_gate.all_ok(rescue):
         raise GenerateError("救机门禁没有通过，不输出文件", checks)
@@ -275,7 +306,7 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
         project_version=len(project.get("versions", [])),
         template_id=template["id"], model=template["model"], firmware=template["firmware"],
         input_sha256=result["input_sha256"], output_sha256=result["output_sha256"],
-        output_filename="fwdc239b.bin",
+        output_filename=family.filename,
         payload_sha256_before=result["payload_sha256_before"],
         payload_sha256_after=result["payload_sha256_after"],
         version_word=result["version_word"], summary=summarize(changes, template, include_films=inplace, order=order, features=camera_on),
@@ -283,7 +314,7 @@ def _run(store, project, template, official_bin, *, film_profiles=None, inplace=
         features=features, payload_changes=result["payload_changes"],
         container=result["container"], builder=result["builder"], checks=checks,
         skipped=skipped,
-        rescue=dict(rescue_gate.RESCUE_NOTE),
+        rescue=rescue_gate.rescue_note(family),
         body=body_info,
         verification=verification_note(edits, template, body, jpeg is not None),
     )
@@ -311,17 +342,18 @@ def run_inplace(store, project, template, official_bin):
     template = copy.deepcopy(template)
     if saved != project or saved.get('unsaved'):
         raise GenerateError('工程未保存或已经改变')
-    if (template.get('reviewed') is not True or template.get('model') != 'GR III' or
-            template.get('firmware') != '2.10' or saved.get('template_id') != template.get('id') or
-            saved.get('input_sha256') != models.GR3.input_sha):
-        raise GenerateError('不扩容完整接线仅适用于 GR III 2.10 已核对模板')
+    # GR III 2.10, and GR III 2.20 through the relocated writer (fwaddr) with its own pinned reference.
+    model = {'2.10': models.GR3, '2.20': models.GR3_220}.get(template.get('firmware')) if template.get('model') == 'GR III' else None
+    if (template.get('reviewed') is not True or model is None or
+            saved.get('template_id') != template.get('id') or saved.get('input_sha256') != model.input_sha):
+        raise GenerateError('不扩容完整接线仅适用于 GR III 2.10 / 2.20 已核对模板')
     try:
-        body = body_target.require_family(body_target.of(saved), 'GR III', '2.10')
+        body = body_target.require_family(body_target.of(saved), 'GR III', template.get('firmware'))
         if body is None:
             raise GenerateError('请先选择机身版本')
         source = store.input_path(saved['input_sha256'])
-        if (type(official_bin) is not bytes or len(official_bin) != models.GR3.input_size or
-                hashlib.sha256(official_bin).hexdigest() != models.GR3.input_sha or
+        if (type(official_bin) is not bytes or len(official_bin) != model.input_size or
+                hashlib.sha256(official_bin).hexdigest() != model.input_sha or
                 source.read_bytes() != official_bin):
             raise GenerateError('官方原件身份不一致')
         revision = profile_data.data_revision()
