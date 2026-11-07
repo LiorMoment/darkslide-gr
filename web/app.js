@@ -152,7 +152,7 @@ const SERIES = [
   { name: "GR IIIx 系列", short: "GR IIIx", desc: "40mm · 固件 1.60 / 1.70 · 3 个型号共用", tag: "可用", ready: false,
     fw: "fwdc243b.bin", ver: "1.60", zip: "gr3x_v160.zip", zips: { "1.60": "gr3x_v160.zip", "1.70": "gr3x_v170.zip" }, licence: "https://www.ricoh-imaging.co.jp/english/support/digital/gr3x_s.html",
     note: "同一个固件文件通用于 GR IIIx、城市版、HDF。",
-    models: [["GR IIIx", "标准版", true], ["GR IIIx Urban Edition", "城市版"], ["GR IIIx HDF", "带柔光滤镜"]] },
+    models: [["GR IIIx", "标准版", true], ["GR IIIx Urban Edition", "城市版", true], ["GR IIIx HDF", "带柔光滤镜"]] },
   { name: "GR IV", short: "GR IV", desc: "28mm · 新一代", tag: "适配中", off: true, models: [] },
 ];
 const CAM_KEY = "darkslide.camera";
@@ -1420,6 +1420,8 @@ async function generate() {
 async function generateNow() {
   if (!state.project.menu_language) { toast("先选择相机使用的菜单语言", true); return; }
   const candidate = !!(state.project.capabilities && state.project.capabilities.candidate_generation);
+  // GR IIIx bodies a user has flashed and used: the standard one (1.60) and the Urban Edition (1.70).
+  const iiixTested = ["GR IIIx", "GR IIIx Urban Edition"].includes(state.project.camera_variant);
   const recipeExtension = candidate && !!state.project.capabilities.candidate_recipe_extension && $("iiixRecipeExtension").checked;
   if (state.project.capabilities && !state.project.capabilities.full_firmware && !candidate) {
     toast(state.project.capabilities.note, true); return;
@@ -1444,11 +1446,11 @@ async function generateNow() {
   const fw = state.template.firmware, file = ((state.template.official_inputs || [])[0] || {}).filename;
   if (!(state.status.prefs || {}).preflight_seen) {
     // what the first-build reminder says depends on the model and version: only some have been on a camera
-    const newer = !!(state.project.capabilities && state.project.capabilities.new_firmware);
+    const newer = !!(state.project.capabilities && state.project.capabilities.new_firmware) && !(candidate && iiixTested);
     $("preflightRecovery").textContent = newer
       ? `本次为 ${state.template.model} ${fw} 固件，官方原件为 ${file}；${fw} 的适配还没有在任何相机上实测，刷回官方 ${fw} 也没有验证过。准备一张只放这个原件的救机卡。`
       : candidate
-      ? "本次为 GR IIIx 1.60 固件，官方原件为 fwdc243b.bin；标准版已有用户实机刷入使用，城市版、HDF 和刷回官方 1.60 尚未实机验证。"
+      ? `本次为 GR IIIx ${fw} 固件，官方原件为 fwdc243b.bin；标准版和城市版已有用户实机刷入使用，HDF 和刷回官方 ${fw} 尚未实机验证。`
       : `准备一张只放官方 ${fw || "2.10"} 原件 ${file || "fwdc239b.bin"} 的救机卡。`;
     $("preflightDialog").showModal(); return;
   }
@@ -1457,9 +1459,10 @@ async function generateNow() {
   const fresh = [orderOn() && window.DarkslideOrder.payload(state.order) != null ? "菜单排序" : ""].filter(Boolean);
   // 柔光: this build has not been on a camera yet, on any firmware; every build with it asks.
   const glowUntested = !!(state.features || {}).soft_glow;
-  const untestedVariant = state.project.camera_variant !== "GR IIIx";
-  // GR III 2.20 / GR IIIx 1.70: nothing has been flashed on these yet, so every build asks.
-  const newFirmware = !!(state.project.capabilities && state.project.capabilities.new_firmware);
+  const untestedVariant = !iiixTested;
+  // GR III 2.20: nothing has been flashed on it yet, so every build asks. GR IIIx 1.70 has been flashed and used by a
+  // user (Urban Edition, 2026-11-07), so it asks like 1.60: only on the untested HDF body.
+  const newFirmware = !!(state.project.capabilities && state.project.capabilities.new_firmware) && !(candidate && iiixTested);
   // The fifth film position has not been on any camera, on any firmware: it asks every time too.
   const vivid = !!(state.changes[2] && state.changes[2].film);
   // 画幅: this build has not been on a camera yet, on any body; every build with it asks.
@@ -1485,6 +1488,11 @@ async function generateNow() {
       for (const id of ["untestedHead", "untestedVariant", "untestedRescue"]) {
         const n = $(id);
         if (n.dataset && n.dataset.text !== undefined) n.innerHTML = n.dataset.text;
+      }
+      // the page's own wording names 1.60; a GR IIIx 1.70 build needs its own rescue file and version
+      if (fw && fw !== "1.60") {
+        if ($("untestedRescue").dataset.text === undefined) $("untestedRescue").dataset.text = $("untestedRescue").innerHTML;
+        $("untestedRescue").textContent = `刷之前请准备一张只放官方 ${fw} 原件 ${file} 的救机卡。如果刷坏到按住 MENU 开机也进不了更新画面，目前没有已验证的恢复办法。`;
       }
       $("untestedBody").textContent = body ? "（这次是 " + body + "）" : "";
     }
@@ -2246,8 +2254,8 @@ function renderRescue() {
   document.querySelectorAll(".rescue-file").forEach((n) => { n.textContent = r.file; });
   $("rescueTested").textContent = r.model === "GR III" && r.ver === "2.10"
     ? "一个第五槽、画幅和柔光测试包曾在一台普通 GR III 2.10 上刷回官方一次；本次配置仍需验证。"
-    : r.model === "GR IIIx" && r.ver === "1.60"
-    ? "GR IIIx 标准版已有用户实机刷入改过的 1.60 并正常使用；能不能再刷回官方 1.60 原件还没有在真机上验证过，城市版和 HDF 也还没有实测。"
+    : r.model === "GR IIIx" && (r.ver === "1.60" || r.ver === "1.70")
+    ? `GR IIIx 已有用户实机刷入改过的固件并正常使用（标准版 1.60、城市版 1.70）；能不能再刷回官方 ${r.ver} 原件还没有在真机上验证过，HDF 也还没有实测。`
     : r.model + " 属于“已适配 · 未实测”：改过的 " + r.ver + " 能不能刷进机身、能不能再刷回官方 " + r.ver + " 原件，都还没有在真机上验证过。";
 }
 

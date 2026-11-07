@@ -15,8 +15,8 @@ from .fwaddr import A as fa
 from . import fwaddr
 
 LAYOUT = 'gr3x160_inplace_candidate_v1'
-NOTE = 'GR IIIx 1.60 固件；标准版已有用户实机刷入使用，城市版、HDF 及刷回官方 1.60 未实机验证。'
-NOTE_170 = 'GR IIIx 1.70 固件（理光 2026-10-21 发布）；DARKSLIDE GR 的适配只做了离线核对，还没有在任何 GR IIIx 1.70 上刷入实测，刷回官方 1.70 也未验证。'
+NOTE = 'GR IIIx 1.60 固件；标准版、城市版已有用户实机刷入使用，HDF 及刷回官方 1.60 未实机验证。'
+NOTE_170 = 'GR IIIx 1.70 固件（理光 2026-10-21 发布）；已有用户在 GR IIIx 城市版上实机刷入使用，HDF 及刷回官方 1.70 未实机验证。'
 
 
 def sha(data):

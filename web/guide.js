@@ -18,7 +18,7 @@ window.DarkslideGuide = (function () {
     // 1.6.1: the new firmware and the fifth film position, both said to be untested on a camera.
     news: [
       { label: "这一版新增", badge: "NEW", title: "新固件、鲜艳胶片和新画幅",
-        lines: ["支持 GR III 2.20 和 GR IIIx 1.70（还没在相机上实测）", "鲜艳也能装胶片，一共 5 个预设（一个测试包在一台 GR III 2.10 上试过）", "新增 16:9 和 65:24 画幅，只裁 JPEG、RAW 保持 3:2。只支持固件 2.10 和 1.60，2.20 和 1.70 暂不支持（一个测试包在 GR III 2.10 试过，GR IIIx 1.60 未实测）",
+        lines: ["支持 GR III 2.20 和 GR IIIx 1.70（1.70 已有用户在城市版上刷入使用，2.20 还没在相机上实测）", "鲜艳也能装胶片，一共 5 个预设（一个测试包在一台 GR III 2.10 上试过）", "新增 16:9 和 65:24 画幅，只裁 JPEG、RAW 保持 3:2。只支持固件 2.10 和 1.60，2.20 和 1.70 暂不支持（一个测试包在 GR III 2.10 试过，GR IIIx 1.60 未实测）",
                 "相机菜单语言默认跟界面语言一致", "修了键盘调滑块、自定义胶片图标等几个小问题"],
         next: "带我看看", skip: "以后再说" },
     ],

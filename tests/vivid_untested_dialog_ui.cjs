@@ -45,8 +45,25 @@ const FILM = { film: 'portra160' };
   await p.go();
   assert.strictEqual(p.el('untestedDialog').opened, true);
   assert.strictEqual(p.el('untestedVivid').hidden, false);
-  // new firmware: always asks; the Vivid line only with a film on Vivid
-  for (const [model, firmware, file, candidate] of [['GR III', '2.20', 'fwdc239b.bin', false], ['GR IIIx', '1.70', 'fwdc243b.bin', true]]) {
+  // GR IIIx 1.70 on the bodies a user has flashed (standard, Urban Edition): asks like 1.60, only for the Vivid film,
+  // and then names the 1.70 rescue file; the HDF body still asks every time as new firmware
+  for (const variant of ['GR IIIx', 'GR IIIx Urban Edition']) {
+    p = page({ model: 'GR IIIx', firmware: '1.70', file: 'fwdc243b.bin', candidate: true, newFirmware: true, variant, changes: { 8: FILM } });
+    await p.go();
+    assert.strictEqual(p.el('untestedDialog').opened, false, variant);
+    p = page({ model: 'GR IIIx', firmware: '1.70', file: 'fwdc243b.bin', candidate: true, newFirmware: true, variant, changes: { 2: FILM } });
+    await p.go();
+    assert.strictEqual(p.el('untestedDialog').opened, true, variant);
+    assert.strictEqual(p.el('untestedVivid').hidden, false);
+    assert.strictEqual(p.el('untestedVariant').hidden, true);
+    assert.ok(p.el('untestedRescue').textContent.includes('1.70') && p.el('untestedRescue').textContent.includes('fwdc243b.bin'));
+  }
+  p = page({ model: 'GR IIIx', firmware: '1.70', file: 'fwdc243b.bin', candidate: true, newFirmware: true, variant: 'GR IIIx HDF', changes: { 8: FILM } });
+  await p.go();
+  assert.strictEqual(p.el('untestedDialog').opened, true);
+  assert.ok(p.el('untestedHead').textContent.includes('1.70'));
+  // GR III 2.20: no camera report yet, always asks; the Vivid line only with a film on Vivid
+  for (const [model, firmware, file, candidate] of [['GR III', '2.20', 'fwdc239b.bin', false]]) {
     p = page({ model, firmware, file, candidate, newFirmware: true, variant: model, changes: { 8: FILM } });
     await p.go();
     assert.strictEqual(p.el('untestedDialog').opened, true);
@@ -71,17 +88,18 @@ const FILM = { film: 'portra160' };
     assert.strictEqual(p.el('preflightDialog').opened, true, firmware);
     assert.ok(said.includes(firmware) && said.includes(file), firmware + ': ' + said);
     for (const other of ['2.10', '2.20', '1.60', '1.70']) if (other !== firmware) assert.ok(!said.includes(other), firmware + ' mentions ' + other);
-    assert.strictEqual(/已有用户实机刷入使用/.test(said), firmware === '1.60', firmware);
-    assert.strictEqual(/没有在任何相机上实测/.test(said), newFirmware, firmware);
+    // GR IIIx 1.60 and 1.70 have been flashed by users; GR III 2.20 has not been on a camera yet
+    assert.strictEqual(/已有用户实机刷入使用/.test(said), firmware === '1.60' || firmware === '1.70', firmware);
+    assert.strictEqual(/没有在任何相机上实测/.test(said), firmware === '2.20', firmware);
   }
-  // Vivid together with 柔光 or 菜单排序: the GR IIIx wording only on GR IIIx 1.60
+  // Vivid together with 柔光 or 菜单排序: the GR IIIx wording only on GR IIIx 1.60 / 1.70
   for (const extra of [{ order: true }, { features: { soft_glow: true }, order: true }]) {
     for (const [model, firmware, file, candidate, newFirmware] of VERSIONS) {
       p = page({ model, firmware, file, candidate, newFirmware, variant: model, changes: { 2: FILM }, ...extra });
       await p.go();
       assert.strictEqual(p.el('untestedDialog').opened, true, firmware);
       assert.strictEqual(p.el('untestedVivid').hidden, false, firmware);
-      assert.strictEqual(p.el('untestedFeatures').hidden, firmware !== '1.60', firmware);
+      assert.strictEqual(p.el('untestedFeatures').hidden, firmware !== '1.60' && firmware !== '1.70', firmware);
       if (firmware === '2.10') assert.strictEqual(p.el('untestedVariant').hidden, true);
     }
   }

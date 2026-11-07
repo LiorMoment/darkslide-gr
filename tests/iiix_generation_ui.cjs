@@ -36,20 +36,23 @@ const confirm=async()=>{shown=0;const before=calls.length;await ctx.generate();a
  calls=[];ctx.state.project={id:'P',menu_language:'en',capabilities:{candidate_generation:true}};ctx.state.changes={8:{film:'gold200'}};node('iiixRecipeExtension').checked=false;
  await confirm();assert.equal(node('untestedExtension').hidden,true);p=ctx.generate();await tick();assert.equal(calls[0][2].recipe_extension,false);pending.shift().resolve({build_id:'C',project_id:'P'});await p;assert.equal(result.data.build_id,'C');
  calls=[];saved=false;await confirm();await ctx.generate();assert.equal(calls.length,0);assert.equal(ctx.state.untestedAck,false);
- // Since 1.3.1 the standard GR IIIx is camera-tested: no untested-risk dialog, straight to the request.
- // The Urban and HDF editions still ask every time.
+ // Since 1.3.1 the standard GR IIIx is camera-tested, and the Urban Edition too (a user, firmware 1.70): no untested-risk
+ // dialog, straight to the request. The HDF edition still asks every time.
  saved=true;calls=[];shown=0;ctx.state.untestedAck=false;node('iiixRecipeExtension').checked=false;ctx.state.changes={8:{film:'gold200'}};
- ctx.state.project={id:'P',menu_language:'en',camera_variant:'GR IIIx',capabilities:{candidate_generation:true,full_firmware:false}};
- p=ctx.generate();await tick();assert.equal(shown,0);assert.equal(calls.length,1);pending.shift().resolve({build_id:'D',project_id:'P'});await p;
+ for(const variant of ['GR IIIx','GR IIIx Urban Edition']){
+ calls=[];shown=0;ctx.state.untestedAck=false;
+ ctx.state.project={id:'P',menu_language:'en',camera_variant:variant,capabilities:{candidate_generation:true,full_firmware:false}};
+ p=ctx.generate();await tick();assert.equal(shown,0,variant);assert.equal(calls.length,1,variant);pending.shift().resolve({build_id:'D',project_id:'P'});await p;
+ }
  // 柔光 has not been on a camera in this build, on any firmware, so it has its own line; 菜单排序 is tested on GR III only.
  calls=[];shown=0;ctx.state.untestedAck=false;ctx.state.features={soft_glow:true};
  ctx.state.project={id:'P',menu_language:'en',camera_variant:'GR IIIx',capabilities:{candidate_generation:true,full_firmware:false}};
  await ctx.generate();await tick();assert.equal(shown,1);assert.equal(calls.length,0);
  assert.equal(node('untestedGlow').hidden,false);assert.equal(node('untestedFeatures').hidden,true);assert.equal(node('untestedVariant').hidden,true);
  ctx.state.features={};
- for(const variant of ['GR IIIx Urban Edition','GR IIIx HDF']){
+ for(const variant of ['GR IIIx HDF']){
   calls=[];ctx.state.untestedAck=false;ctx.state.project={id:'P',menu_language:'en',camera_variant:variant,capabilities:{candidate_generation:true,full_firmware:false}};
   await confirm();
  }
- console.log('PASS candidate UI: untested-risk confirmation every time (not for the camera-tested standard GR IIIx unless 柔光/排序 are in the build), recipe module off by capability, explicit extension when on, empty restore-only, saved-state barrier, project switch isolation');
+ console.log('PASS candidate UI: untested-risk confirmation every time (not for the camera-tested standard GR IIIx and Urban Edition unless 柔光/排序 are in the build), recipe module off by capability, explicit extension when on, empty restore-only, saved-state barrier, project switch isolation');
 })().catch(e=>{console.error(e);process.exitCode=1});

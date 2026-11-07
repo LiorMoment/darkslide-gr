@@ -143,7 +143,7 @@ New firmware released by Ricoh on 2026-10-21.
 - **What works**: exactly what 2.10 / 1.60 has — icons, preset names, Negative Film grain, menu order, films, importing and fitting LUTs and your own grades, Soft Glow and the shutdown image. GR IIIx 1.70 uses "Build offline candidate", like 1.60.
 - **How**: the new firmware's main program was recompiled and every address moved. DARKSLIDE GR uses an address table checked entry by entry; the films and Soft Glow were rebuilt at the new addresses and checked word by word to differ from the 2.10 / 1.60 versions only in addresses. The camera model used for fitting gives exactly the same base curve on the new firmware as on 2.10 / 1.60.
 - **Shutdown image**: 2.20 / 1.70 add 20th and 30th anniversary shutdown styles, and on a normal start-up the camera sets the style to the 30th anniversary (consistent with Ricoh saying the shutdown screen cannot be changed back after updating). On the new firmware DARKSLIDE GR's shutdown image covers all seven styles, so your picture shows whichever style is set; the two anniversary pictures themselves are left alone.
-- **Testing status**: all "adapted, not camera-tested": nothing has been flashed onto a camera yet, and flashing the official 2.20 / 1.70 back has not been verified. You confirm the risk before every build.
+- **Testing status**: GR IIIx 1.70 has been flashed with modified firmware and used normally by a user on an Urban Edition; GR III 2.20 and the GR IIIx HDF have not been flashed onto a camera yet, and you confirm the risk before every build for them. Flashing the official 2.20 / 1.70 back has not been verified; prepare a rescue card before flashing.
 
 ## How it keeps you safe
 

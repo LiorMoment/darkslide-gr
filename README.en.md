@@ -66,14 +66,16 @@ The fifth slot, Vivid, is available on GR III 2.10 / 2.20 and GR IIIx 1.60 / 1.7
 | GR III HDF | 2.10 | ✅ Films, preset names and Traditional Chinese menus tested by a user; menu order and soft glow not tested |
 | GR III Street, Diary | 2.10 | ⚠️ Adapted, not camera-tested |
 | GR IIIx | 1.60 | ✅ Flashed and used by a user; menu order and soft glow not tested |
-| GR IIIx Urban, HDF | 1.60 | ⚠️ Adapted, not camera-tested |
+| GR IIIx Urban | 1.60 / 1.70 | ✅ Flashed and used by a user (1.70); menu order, soft glow, the fifth Vivid position and wide ratios not tested |
+| GR IIIx HDF | 1.60 | ⚠️ Adapted, not camera-tested |
 | GR III, all models (incl. Street, Diary, HDF) | 2.20 | ⚠️ Adapted, not camera-tested: the same features as 2.10 (no wide ratios yet), offline checks pass, the five films' data had an independent read-back after a full build, not yet flashed onto any camera |
-| GR IIIx, all models (incl. Urban, HDF) | 1.70 | ⚠️ Adapted, not camera-tested: the same features as 1.60 (no wide ratios yet), offline checks pass, the five films' data had an independent read-back after a full build, not yet flashed onto any camera |
+| GR IIIx | 1.70 | ✅ The same adaptation as 1.60; the Urban Edition has been flashed with 1.70 and used by a user; the same features as 1.60 (no wide ratios yet) |
+| GR IIIx HDF | 1.70 | ⚠️ Adapted, not camera-tested |
 | GR IV | — | 🚧 Being adapted, cannot build yet |
 
 - "Tested" means one camera; the samples are few, and your icons, names and film choices may not have been tried.
 - Whenever you use something not camera-tested, you confirm the risk before every build.
-- **Import the official file for the version your camera runs now** (Menu › Setup › Firmware version). 2.20 / 1.70 is new firmware released by Ricoh on 2026-10-21 with a recompiled main program; DARKSLIDE GR relocated every address it uses. Ricoh says the shutdown screen cannot be changed back after updating to 2.20 / 1.70; on the new firmware DARKSLIDE GR's shutdown image covers all seven shutdown styles, including the new 20th and 30th anniversary ones.
+- **Import the official file for the version your camera runs now** (Menu › Setup › Firmware version). 2.20 / 1.70 is new firmware released by Ricoh on 2026-10-21 with a recompiled main program; DARKSLIDE GR relocated every address it uses. Ricoh says the shutdown screen cannot be changed back after updating to 2.20 / 1.70; on the new firmware DARKSLIDE GR's shutdown image covers all seven shutdown styles, including the new 20th and 30th anniversary ones. A user has flashed modified GR IIIx 1.70 firmware onto an Urban Edition 30th anniversary model and uses it normally; GR III 2.20 has no camera report yet, and flashing the official 2.20 / 1.70 back has not been verified.
 - Item-by-item testing notes: [user guide](docs/user-guide/).
 
 ## Risks
